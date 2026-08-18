@@ -43,10 +43,11 @@ def main():
         mido.open_input(input_name) as inp,
         mido.open_output(output_name) as out
     ):
+        client = sq64.SQ64Client(inp, out)
+
         print("\nReading current project and existing patterns...")
-        project, melody_patterns, rhythm_patterns = sq64.read_current_project(
-            inp,
-            out,
+        project, melody_patterns, rhythm_patterns = (
+            client.read_current_project()
         )
         sq64.print_project_dump(project, melody_patterns, rhythm_patterns)
 
@@ -58,9 +59,7 @@ def main():
         pattern = sq64.build_pattern()
 
         print("Sending Track A / Pattern 1...")
-        sq64.send_pattern(
-            inp,
-            out,
+        client.send_pattern(
             project,
             pattern,
             melody_patterns,

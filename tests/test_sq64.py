@@ -136,6 +136,77 @@ class MidiPortTests(unittest.TestCase):
         sleep.assert_called_once_with(0.001)
 
 
+class ClientTests(unittest.TestCase):
+    def test_client_uses_its_configured_global_channel(self):
+        reply = sq64.sq64_sysex(
+            sq64.FUNC_ACK,
+            global_channel=15,
+        )
+        client = sq64.SQ64Client(
+            RecordingPort([reply]),
+            RecordingPort(),
+            global_channel=15,
+        )
+
+        message = client.wait_for_function(sq64.FUNC_ACK)
+
+        self.assertEqual(message, reply)
+        self.assertEqual(client.sysex(0x11).data[1], 0x3F)
+
+    def test_client_uses_module_default_channel(self):
+        with patch.object(sq64, "GLOBAL_CHANNEL", 4):
+            client = sq64.SQ64Client(RecordingPort(), RecordingPort())
+
+        self.assertEqual(client.global_channel, 4)
+
+    def test_client_rejects_invalid_global_channel(self):
+        for channel in (-1, 16, "1"):
+            with self.subTest(channel=channel):
+                with self.assertRaisesRegex(ValueError, "between 0 and 15"):
+                    sq64.SQ64Client(
+                        RecordingPort(),
+                        RecordingPort(),
+                        global_channel=channel,
+                    )
+
+    @patch("sq64.get_firmware_version", return_value="2.04")
+    def test_client_firmware_query_uses_owned_ports(self, get_version):
+        inport = RecordingPort()
+        outport = RecordingPort()
+        client = sq64.SQ64Client(inport, outport)
+
+        self.assertEqual(client.get_firmware_version(timeout=1.5), "2.04")
+        get_version.assert_called_once_with(inport, outport, 1.5)
+
+    @patch("sq64.send_pattern")
+    @patch("sq64.read_current_project", return_value=(b"project", {}, {}))
+    def test_client_project_operations_use_owned_ports(
+        self, read_current_project, send_pattern
+    ):
+        inport = RecordingPort()
+        outport = RecordingPort()
+        client = sq64.SQ64Client(inport, outport, global_channel=6)
+
+        result = client.read_current_project()
+        client.send_pattern(b"project", b"pattern", {}, {})
+
+        self.assertEqual(result, (b"project", {}, {}))
+        read_current_project.assert_called_once_with(
+            inport,
+            outport,
+            global_channel=6,
+        )
+        send_pattern.assert_called_once_with(
+            inport,
+            outport,
+            b"project",
+            b"pattern",
+            {},
+            {},
+            global_channel=6,
+        )
+
+
 class SysexTests(unittest.TestCase):
     def test_sq64_sysex_builds_protocol_header_and_payload(self):
         with patch.object(sq64, "GLOBAL_CHANNEL", 4):
@@ -195,7 +266,12 @@ class SysexTests(unittest.TestCase):
         with self.assertRaisesRegex(TimeoutError, "after melody pattern"):
             sq64.wait_for_ack(Mock(), "melody pattern", timeout=2.0)
 
-        wait_for_function.assert_called_once_with(ANY, sq64.FUNC_ACK, 2.0)
+        wait_for_function.assert_called_once_with(
+            ANY,
+            sq64.FUNC_ACK,
+            2.0,
+            global_channel=None,
+        )
 
 
 class PackingTests(unittest.TestCase):

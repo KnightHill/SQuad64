@@ -78,6 +78,86 @@ def find_sq64_ports():
     return input_name, sequence_outputs[0]
 
 
+class SQ64Client:
+    """Operate one SQ-64 through an open pair of MIDI ports."""
+
+    def __init__(self, inport, outport, global_channel=None):
+        if global_channel is None:
+            global_channel = GLOBAL_CHANNEL
+
+        if (
+            not isinstance(global_channel, int)
+            or not 0 <= global_channel <= 15
+        ):
+            raise ValueError("SQ-64 global channel must be between 0 and 15")
+
+        self.inport = inport
+        self.outport = outport
+        self.global_channel = global_channel
+
+    def sysex(self, function, extra=()):
+        """Build a SysEx message addressed to this SQ-64."""
+        return sq64_sysex(function, extra, self.global_channel)
+
+    def wait_for_function(self, wanted, timeout=5.0):
+        """Wait for a function response from this SQ-64."""
+        return wait_for_function(
+            self.inport,
+            wanted,
+            timeout,
+            global_channel=self.global_channel,
+        )
+
+    def wait_for_ack(self, context="data transfer", timeout=10.0):
+        """Wait for an acknowledgement from this SQ-64."""
+        return wait_for_ack(
+            self.inport,
+            context,
+            timeout,
+            global_channel=self.global_channel,
+        )
+
+    def get_firmware_version(self, timeout=5.0):
+        """Request and return this SQ-64's firmware version."""
+        return get_firmware_version(self.inport, self.outport, timeout)
+
+    def read_pattern_dump(self, request_func, dump_func, selector,
+                          packed_size, unpacked_size, expected_signature):
+        """Request, validate, and unpack one pattern from this SQ-64."""
+        return read_pattern_dump(
+            self.inport,
+            self.outport,
+            request_func,
+            dump_func,
+            selector,
+            packed_size,
+            unpacked_size,
+            expected_signature,
+            global_channel=self.global_channel,
+        )
+
+    def read_current_project(self):
+        """Read this SQ-64's current project and populated patterns."""
+        return read_current_project(
+            self.inport,
+            self.outport,
+            global_channel=self.global_channel,
+        )
+
+    def send_pattern(self, project, pattern,
+                     melody_patterns, rhythm_patterns):
+        """Replace A1 while preserving this SQ-64's other patterns."""
+        return send_pattern(
+            self.inport,
+            self.outport,
+            project,
+            pattern,
+            melody_patterns,
+            rhythm_patterns,
+            global_channel=self.global_channel,
+        )
+
+
 def get_firmware_version(inport, outport, timeout=5.0):
     """Request and return the connected SQ-64 firmware version."""
     outport.send(mido.Message("sysex", data=DEVICE_INQUIRY_REQUEST))
@@ -124,9 +204,12 @@ def get_firmware_version(inport, outport, timeout=5.0):
 # Korg SysEx
 # ------------------------------------------------------------
 
-def sq64_sysex(function, extra=()):
+def sq64_sysex(function, extra=(), global_channel=None):
     """Build an SQ-64 Korg SysEx message."""
-    device_id = 0x30 + GLOBAL_CHANNEL
+    if global_channel is None:
+        global_channel = GLOBAL_CHANNEL
+
+    device_id = 0x30 + global_channel
 
     return mido.Message(
         "sysex",
@@ -140,8 +223,11 @@ def sq64_sysex(function, extra=()):
     )
 
 
-def get_function(msg):
+def get_function(msg, global_channel=None):
     """Return the function ID from a valid SQ-64 SysEx message."""
+    if global_channel is None:
+        global_channel = GLOBAL_CHANNEL
+
     if msg.type != "sysex":
         return None
 
@@ -152,7 +238,7 @@ def get_function(msg):
 
     expected = [
         KORG_ID,
-        0x30 + GLOBAL_CHANNEL,
+        0x30 + global_channel,
         *SQ64_ID,
     ]
 
@@ -162,7 +248,7 @@ def get_function(msg):
     return d[5]
 
 
-def wait_for_function(port, wanted, timeout=5.0):
+def wait_for_function(port, wanted, timeout=5.0, *, global_channel=None):
     """Wait for an SQ-64 SysEx function or raise on timeout or NAK."""
     deadline = time.monotonic() + timeout
 
@@ -173,7 +259,7 @@ def wait_for_function(port, wanted, timeout=5.0):
             time.sleep(0.001)
             continue
 
-        func = get_function(msg)
+        func = get_function(msg, global_channel)
 
         if func is None:
             continue
@@ -196,10 +282,16 @@ def wait_for_function(port, wanted, timeout=5.0):
     )
 
 
-def wait_for_ack(port, context="data transfer", timeout=10.0):
+def wait_for_ack(port, context="data transfer", timeout=10.0, *,
+                 global_channel=None):
     """Wait for an SQ-64 acknowledgement with transfer context."""
     try:
-        wait_for_function(port, FUNC_ACK, timeout)
+        wait_for_function(
+            port,
+            FUNC_ACK,
+            timeout,
+            global_channel=global_channel,
+        )
     except TimeoutError as error:
         raise TimeoutError(
             f"Timed out waiting for SQ-64 ACK after {context}"
@@ -271,10 +363,14 @@ def unpack_7bit(data, expected_size):
 
 def read_pattern_dump(inport, outport, request_func, dump_func,
                       selector, packed_size, unpacked_size,
-                      expected_signature):
+                      expected_signature, *, global_channel=None):
     """Request, validate, and unpack one SQ-64 pattern."""
-    outport.send(sq64_sysex(request_func, [selector]))
-    msg = wait_for_function(inport, dump_func)
+    outport.send(sq64_sysex(request_func, [selector], global_channel))
+    msg = wait_for_function(
+        inport,
+        dump_func,
+        global_channel=global_channel,
+    )
 
     response = list(msg.data)[6:]
 
@@ -308,19 +404,25 @@ def read_pattern_dump(inport, outport, request_func, dump_func,
     return pattern
 
 
-def read_current_project(inport, outport):
+def read_current_project(inport, outport, *, global_channel=None):
     """Read the current project and all patterns marked as present."""
     # Request current project.
     outport.send(
-        sq64_sysex(FUNC_CURRENT_PROJECT_REQUEST)
+        sq64_sysex(
+            FUNC_CURRENT_PROJECT_REQUEST,
+            global_channel=global_channel,
+        )
     )
 
     def finalize_transaction():
         """Leave the SQ-64 project-read transaction."""
-        outport.send(sq64_sysex(FUNC_FINALIZE))
+        outport.send(sq64_sysex(
+            FUNC_FINALIZE,
+            global_channel=global_channel,
+        ))
 
         try:
-            wait_for_ack(inport)
+            wait_for_ack(inport, global_channel=global_channel)
         except TimeoutError:
             # Some SQ-64 v2.x units leave transmitting-project mode without
             # returning the documented ACK. The finalize message was still
@@ -332,7 +434,8 @@ def read_current_project(inport, outport):
     try:
         msg = wait_for_function(
             inport,
-            FUNC_CURRENT_PROJECT_DUMP
+            FUNC_CURRENT_PROJECT_DUMP,
+            global_channel=global_channel,
         )
 
         packed = list(msg.data)[6:]
@@ -371,6 +474,7 @@ def read_current_project(inport, outport):
                     3548,
                     3104,
                     b"PATT",
+                    global_channel=global_channel,
                 )
 
         rhythm_patterns = {}
@@ -392,6 +496,7 @@ def read_current_project(inport, outport):
                 7059,
                 6176,
                 b"PATR",
+                global_channel=global_channel,
             )
     except BaseException:
         # Preserve the original read/validation failure if cleanup also fails.
@@ -615,7 +720,7 @@ def build_pattern():
 # ------------------------------------------------------------
 
 def send_pattern(inport, outport, project, pattern,
-                 melody_patterns, rhythm_patterns):
+                 melody_patterns, rhythm_patterns, *, global_channel=None):
     """Replace A1 while retransmitting all preserved project patterns."""
     # Validate and pack everything before putting the SQ-64 into receiving
     # project mode.
@@ -658,30 +763,45 @@ def send_pattern(inport, outport, project, pattern,
         outport.send(
             sq64_sysex(
                 FUNC_CURRENT_PROJECT_DUMP,
-                project_packed
+                project_packed,
+                global_channel,
             )
         )
-        wait_for_ack(inport, "current project header")
+        wait_for_ack(
+            inport,
+            "current project header",
+            global_channel=global_channel,
+        )
 
         for label, selector, pattern_packed in prepared_melodies:
             print(f"  Sending {label}...")
             outport.send(
                 sq64_sysex(
                     FUNC_MELODY_PATTERN_DUMP,
-                    [selector, *pattern_packed]
+                    [selector, *pattern_packed],
+                    global_channel,
                 )
             )
-            wait_for_ack(inport, label)
+            wait_for_ack(
+                inport,
+                label,
+                global_channel=global_channel,
+            )
 
         for label, pattern_number, pattern_packed in prepared_rhythms:
             print(f"  Sending {label}...")
             outport.send(
                 sq64_sysex(
                     FUNC_RHYTHM_PATTERN_DUMP,
-                    [pattern_number, *pattern_packed]
+                    [pattern_number, *pattern_packed],
+                    global_channel,
                 )
             )
-            wait_for_ack(inport, label)
+            wait_for_ack(
+                inport,
+                label,
+                global_channel=global_channel,
+            )
     except BaseException as error:
         transfer_error = error
         raise
@@ -691,8 +811,15 @@ def send_pattern(inport, outport, project, pattern,
         # the SQ-64 in receiving-project mode.
         try:
             print("  Finalizing project transfer...")
-            outport.send(sq64_sysex(FUNC_FINALIZE))
-            wait_for_ack(inport, "project finalize")
+            outport.send(sq64_sysex(
+                FUNC_FINALIZE,
+                global_channel=global_channel,
+            ))
+            wait_for_ack(
+                inport,
+                "project finalize",
+                global_channel=global_channel,
+            )
         except Exception as cleanup_error:
             if transfer_error is None:
                 raise
