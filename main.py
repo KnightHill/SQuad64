@@ -386,8 +386,34 @@ def print_project_dump(project, melody_patterns, rhythm_patterns):
 # Build one melodic pattern
 # ------------------------------------------------------------
 
-def build_pattern():
+def build_reference_structure():
+    """Reproduce the initialized melodic structure captured from the SQ-64."""
     data = bytearray(3104)
+    data[0:4] = b"PATT"
+    data[4:20] = b"Init Pattern".ljust(16, b"\0")
+    data[20] = 16
+    data[23] = 0
+    data[24] = 2
+    data[26] = 0x60
+    data[28] = 0x10
+
+    for step_number in range(64):
+        note_offset = 32 + step_number * 48
+        data[note_offset:note_offset + 5] = bytes([
+            48,   # C3
+            255,  # Captured modulation/velocity
+            0,    # Gate offset
+            75,   # Gate length
+            0x11, # Trigger + event exists; note is initially off
+        ])
+
+    return data
+
+
+def build_pattern():
+    # Start with the replicated SQ-64 structure, then overlay the sequence
+    # generated entirely on the laptop.
+    data = build_reference_structure()
 
     # Pattern header
     data[0:4] = b"PATT"
@@ -407,7 +433,9 @@ def build_pattern():
     # MONO mode
     data[23] = 0
 
-    # Remaining pattern parameters stay at zero.
+    # Keep the remaining replicated SQ-64 pattern parameters. In particular,
+    # this firmware stores the selected 1/16 timing as 0x10 at
+    # byte 28 rather than the 0x20 implied by Korg's published bit table.
     #
     # Our simple sequence:
     #
@@ -429,10 +457,14 @@ def build_pattern():
     ]
 
     for step_number, note in enumerate(notes):
-        if note is None:
-            continue
-
         step_offset = 32 + step_number * 48
+
+        if note is None:
+            # Preserve the replicated initialized event data, but disable
+            # this step and its note value.
+            data[step_offset + 4] &= ~(1 << 3)
+            data[step_offset + 47] &= ~1
+            continue
 
         # Note Event 1 occupies bytes 0..4 inside each step.
         note_offset = step_offset
@@ -440,33 +472,15 @@ def build_pattern():
         # MIDI note number
         data[note_offset + 0] = note
 
-        # SQ-64 velocity uses 0.5 increments.
-        # 200 => velocity 100.
-        data[note_offset + 1] = 200
+        # Note Event flags byte, bit 3 = note enabled.
+        data[note_offset + 4] |= 1 << 3
 
-        # Gate offset = 0%
-        data[note_offset + 2] = 0
+        # Velocity, gate, flags, and all other event fields retain the values
+        # captured from the reference pattern.
 
-        # Gate length = 80%
-        data[note_offset + 3] = 80
-
-        # Event flags:
-        #
-        # bit 0 = Trigger
-        # bit 2 = Gate
-        # bit 3 = Note
-        # bit 4 = Event Exists
-        #
-        data[note_offset + 4] = (
-            (1 << 0) |
-            (1 << 2) |
-            (1 << 3) |
-            (1 << 4)
-        )
-
-        # Step event offset 47:
-        # bit 0 = step enabled
-        data[step_offset + 47] = 1
+        # Step event offset 47, bit 0 = step enabled. Preserve the remaining
+        # variation-range bits.
+        data[step_offset + 47] |= 1
 
     return data
 
@@ -566,20 +580,23 @@ def main():
         )
         print_project_dump(project, melody_patterns, rhythm_patterns)
 
-        print("Building test pattern...")
+        print("Building replicated test pattern locally...")
         pattern = build_pattern()
 
-        # print("Sending Track A / Pattern 1...")
-        # send_pattern(
-        #     inp,
-        #     out,
-        #     project,
-        #     pattern,
-        #     melody_patterns,
-        #     rhythm_patterns,
-        # )
+        print("Renaming project to BLUE PANDA...")
+        project[4:20] = b"BLUE PANDA".ljust(16, b"\0")
 
-        print("Done (pattern send is disabled).")
+        print("Sending Track A / Pattern 1...")
+        send_pattern(
+            inp,
+            out,
+            project,
+            pattern,
+            melody_patterns,
+            rhythm_patterns,
+        )
+
+        print("Done.")
 
 
 if __name__ == "__main__":
