@@ -146,9 +146,14 @@ def wait_for_function(port, wanted, timeout=5.0):
     )
 
 
-def wait_for_ack(port):
-    """Wait for the SQ-64 data-load acknowledgement."""
-    wait_for_function(port, FUNC_ACK)
+def wait_for_ack(port, context="data transfer", timeout=10.0):
+    """Wait for an SQ-64 acknowledgement with transfer context."""
+    try:
+        wait_for_function(port, FUNC_ACK, timeout)
+    except TimeoutError as error:
+        raise TimeoutError(
+            f"Timed out waiting for SQ-64 ACK after {context}"
+        ) from error
 
 
 # ------------------------------------------------------------
@@ -562,32 +567,17 @@ def build_pattern():
 def send_pattern(inport, outport, project, pattern,
                  melody_patterns, rhythm_patterns):
     """Replace A1 while retransmitting all preserved project patterns."""
-    #
-    # 1. CURRENT PROJECT DATA DUMP
-    #
+    # Validate and pack everything before putting the SQ-64 into receiving
+    # project mode.
     project_packed = pack_7bit(project)
 
-    assert len(project_packed) == 586
+    if len(project) != 512 or len(project_packed) != 586:
+        raise RuntimeError("Invalid project size")
 
-    outport.send(
-        sq64_sysex(
-            FUNC_CURRENT_PROJECT_DUMP,
-            project_packed
-        )
-    )
-
-    wait_for_ack(inport)
-
-    #
-    # 2. MELODY PATTERN DATA DUMP
-    #
-    # tt = 0 -> Track A
-    # pp = 0 -> Pattern 1
-    #
-    melody_patterns[(0, 0)] = pattern
-
+    prepared_melodies = []
+    updated_melodies = {**melody_patterns, (0, 0): pattern}
     for (track, pattern_number), melody_pattern in sorted(
-        melody_patterns.items()
+        updated_melodies.items()
     ):
         selector = (track << 4) | pattern_number
         pattern_packed = pack_7bit(melody_pattern)
@@ -595,35 +585,68 @@ def send_pattern(inport, outport, project, pattern,
         if len(melody_pattern) != 3104 or len(pattern_packed) != 3548:
             raise RuntimeError("Invalid melodic pattern size")
 
-        outport.send(
-            sq64_sysex(
-                FUNC_MELODY_PATTERN_DUMP,
-                [selector, *pattern_packed]
-            )
+        label = (
+            f"Track {chr(ord('A') + track)} / "
+            f"Pattern {pattern_number + 1}"
         )
+        prepared_melodies.append((label, selector, pattern_packed))
 
-        wait_for_ack(inport)
-
+    prepared_rhythms = []
     for pattern_number, rhythm_pattern in sorted(rhythm_patterns.items()):
         pattern_packed = pack_7bit(rhythm_pattern)
 
         if len(rhythm_pattern) != 6176 or len(pattern_packed) != 7059:
             raise RuntimeError("Invalid rhythm pattern size")
 
+        label = f"Track D / Pattern {pattern_number + 1}"
+        prepared_rhythms.append((label, pattern_number, pattern_packed))
+
+    transfer_error = None
+
+    try:
+        print("  Sending current project header...")
         outport.send(
             sq64_sysex(
-                FUNC_RHYTHM_PATTERN_DUMP,
-                [pattern_number, *pattern_packed]
+                FUNC_CURRENT_PROJECT_DUMP,
+                project_packed
             )
         )
+        wait_for_ack(inport, "current project header")
 
-        wait_for_ack(inport)
+        for label, selector, pattern_packed in prepared_melodies:
+            print(f"  Sending {label}...")
+            outport.send(
+                sq64_sysex(
+                    FUNC_MELODY_PATTERN_DUMP,
+                    [selector, *pattern_packed]
+                )
+            )
+            wait_for_ack(inport, label)
 
-    #
-    # 3. Finalize project transfer
-    #
-    outport.send(
-        sq64_sysex(FUNC_FINALIZE)
-    )
-
-    wait_for_ack(inport)
+        for label, pattern_number, pattern_packed in prepared_rhythms:
+            print(f"  Sending {label}...")
+            outport.send(
+                sq64_sysex(
+                    FUNC_RHYTHM_PATTERN_DUMP,
+                    [pattern_number, *pattern_packed]
+                )
+            )
+            wait_for_ack(inport, label)
+    except BaseException as error:
+        transfer_error = error
+        raise
+    finally:
+        # Once the header send has been attempted, always send finalize so a
+        # timeout, NAK, interruption, or backend error cannot knowingly leave
+        # the SQ-64 in receiving-project mode.
+        try:
+            print("  Finalizing project transfer...")
+            outport.send(sq64_sysex(FUNC_FINALIZE))
+            wait_for_ack(inport, "project finalize")
+        except Exception as cleanup_error:
+            if transfer_error is None:
+                raise
+            print(
+                "Warning: failed to finalize SQ-64 project transfer: "
+                f"{cleanup_error}"
+            )
