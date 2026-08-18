@@ -378,6 +378,22 @@ def render_melody_steps(pattern):
     ]
 
 
+def render_rhythm_steps(pattern, subtrack_number):
+    """Render one drum sub-track as rows of trigger symbols."""
+    symbols = []
+    subtrack_offset = 32 + subtrack_number * 384
+
+    for step_number in range(pattern[20]):
+        step_offset = subtrack_offset + step_number * 6
+        trigger_enabled = bool(pattern[step_offset + 3] & (1 << 7))
+        symbols.append("■" if trigger_enabled else " ")
+
+    return [
+        "".join(symbols[start:start + 16])
+        for start in range(0, len(symbols), 16)
+    ]
+
+
 def print_project_dump(project, melody_patterns, rhythm_patterns):
     """Print a concise summary of a dumped SQ-64 project."""
     project_name = decode_name(project)
@@ -413,6 +429,20 @@ def print_project_dump(project, melody_patterns, rhythm_patterns):
             f"    Track D / Pattern {pattern_number + 1}: {name}, "
             f"{pattern[20]} steps, {len(pattern)} bytes"
         )
+
+        for subtrack_number in range(16):
+            rows = render_rhythm_steps(pattern, subtrack_number)
+
+            if not any("■" in row for row in rows):
+                continue
+
+            for row_number, row in enumerate(rows):
+                label = (
+                    f"D{subtrack_number + 1:02}"
+                    if row_number == 0
+                    else "   "
+                )
+                print(f"      {label} |{row:<16}|")
 
 
 # ------------------------------------------------------------
@@ -597,4 +627,3 @@ def send_pattern(inport, outport, project, pattern,
     )
 
     wait_for_ack(inport)
-
