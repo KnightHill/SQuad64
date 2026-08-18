@@ -3,6 +3,26 @@
 This small Python utility generates a 16-step monophonic C-major test pattern
 and writes it to **Track A, Pattern 1** on a connected Korg SQ-64.
 
+## Disclaimer
+
+This project is not affiliated with, endorsed by, or sponsored by Korg Inc. in
+any way. It is experimental software provided as-is and used entirely at your
+own risk. The author is not liable for damage to equipment, loss or corruption
+of projects or other data, or any other direct or indirect damages resulting
+from its use. Back up important SQ-64 projects before enabling updates.
+
+## License
+
+This project is source-available under the
+[PolyForm Noncommercial License 1.0.0](LICENSE.md). You may use, study, modify,
+and redistribute the software for permitted noncommercial purposes, subject to
+the complete license terms and notice requirements.
+
+Commercial use is not granted by this license. This project should therefore
+not be described as OSI-approved open-source software; it is source-available
+software for noncommercial use. Contact the author if you need separate
+permission for commercial use.
+
 The SQ-64 SysEx protocol transfers patterns as part of a project transaction;
 it does not provide an isolated single-pattern write operation. To avoid
 clearing unrelated patterns, the utility first downloads every existing
@@ -80,18 +100,24 @@ backing up important projects before testing is recommended.
 ## MIDI configuration
 
 The SQ-64 global MIDI channel is currently set by `GLOBAL_CHANNEL` in
-[`main.py`](main.py). Its value is zero-based: `0` means MIDI channel 1 and
+[`sq64.py`](sq64.py). Its value is zero-based: `0` means MIDI channel 1 and
 `15` means MIDI channel 16.
 
 The destination is currently fixed to Track A (`0`) and Pattern 1 (`0`).
 
-## Protocol reference
+## Official Korg documentation
 
 The implementation follows Korg's official SQ-64 MIDI Implementation,
 Revision 1.00 (2023-01-24), published for the version 2.x firmware generation:
 
-- [SQ-64 MIDI Implementation download page](https://www.korg.com/us/support/download/manual/0/872/5143/)
-- [SQ-64 support downloads](https://www.korg.com/us/support/download/product/0/872/)
+- [SQ-64 product page](https://www.korg.com/us/products/dj/sq_64/)
+- [SQ-64 owner's manual](https://www.korg.com/us/support/download/manual/0/872/4676/)
+- [System version 2.0 owner's manual](https://www.korg.com/us/support/download/manual/0/872/4926/)
+- [Detailed SQ-64 MIDI Implementation](https://www.korg.com/us/support/download/manual/0/872/5143/)
+- [MIDI Implementation Chart](https://www.korg.com/us/support/download/manual/0/872/4947/)
+- [SQ-64 system updater 2.03 for Windows](https://www.korg.com/us/support/download/software/0/872/4737/)
+- [SQ-64 system updater 2.03 for macOS](https://www.korg.com/us/support/download/software/0/872/4738/)
+- [All SQ-64 support downloads](https://www.korg.com/us/support/download/product/0/872/)
 
 The relevant SysEx functions are:
 
