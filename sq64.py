@@ -29,6 +29,14 @@ FUNC_NO_DATA     = 0x30
 GLOBAL_CHANNEL = 0
 
 
+# MIDI Universal Device Inquiry. The all-call device ID lets the SQ-64 reply
+# even when its configured global channel is not known yet.
+DEVICE_INQUIRY_REQUEST = [0x7E, 0x7F, 0x06, 0x01]
+DEVICE_INQUIRY_REPLY = [0x06, 0x02]
+SQ64_FAMILY_ID = [0x60, 0x01]
+SQ64_MEMBER_ID = [0x00, 0x00]
+
+
 # ------------------------------------------------------------
 # MIDI ports
 # ------------------------------------------------------------
@@ -68,6 +76,48 @@ def find_sq64_ports():
     input_name = midi_out_2_inputs[0] if midi_out_2_inputs else inputs[-1]
 
     return input_name, sequence_outputs[0]
+
+
+def get_firmware_version(inport, outport, timeout=5.0):
+    """Request and return the connected SQ-64 firmware version."""
+    outport.send(mido.Message("sysex", data=DEVICE_INQUIRY_REQUEST))
+    deadline = time.monotonic() + timeout
+
+    while time.monotonic() < deadline:
+        msg = inport.poll()
+
+        if msg is None:
+            time.sleep(0.001)
+            continue
+
+        if msg.type != "sysex":
+            continue
+
+        data = list(msg.data)
+
+        if (
+            len(data) < 4
+            or data[0] != 0x7E
+            or data[2:4] != DEVICE_INQUIRY_REPLY
+        ):
+            continue
+
+        identity = [KORG_ID, *SQ64_FAMILY_ID, *SQ64_MEMBER_ID]
+
+        if len(data) >= 9 and data[4:9] != identity:
+            continue
+
+        if len(data) != 13:
+            raise RuntimeError(
+                f"Invalid SQ-64 device inquiry reply length {len(data)}"
+            )
+
+        minor = data[9] | data[10] << 7
+        major = data[11] | data[12] << 7
+
+        return f"{major}.{minor:02d}"
+
+    raise TimeoutError("Timed out waiting for SQ-64 firmware version")
 
 
 # ------------------------------------------------------------

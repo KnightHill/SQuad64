@@ -57,6 +57,84 @@ class MidiPortTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "SEQ MIDI output"):
             sq64.find_sq64_ports()
 
+    def test_get_firmware_version_sends_inquiry_and_decodes_reply(self):
+        reply = mido.Message(
+            "sysex",
+            data=[
+                0x7E,
+                0x30,
+                0x06,
+                0x02,
+                0x42,
+                0x60,
+                0x01,
+                0x00,
+                0x00,
+                0x04,
+                0x00,
+                0x02,
+                0x00,
+            ],
+        )
+        inport = RecordingPort([mido.Message("clock"), reply])
+        outport = RecordingPort()
+
+        version = sq64.get_firmware_version(inport, outport)
+
+        self.assertEqual(version, "2.04")
+        self.assertEqual(
+            outport.sent,
+            [mido.Message("sysex", data=[0x7E, 0x7F, 0x06, 0x01])],
+        )
+
+    def test_get_firmware_version_ignores_other_devices(self):
+        other_korg = mido.Message(
+            "sysex",
+            data=[
+                0x7E, 0x30, 0x06, 0x02, 0x42,
+                0x59, 0x01, 0x00, 0x00,
+                0x01, 0x00, 0x01, 0x00,
+            ],
+        )
+        sq64_reply = mido.Message(
+            "sysex",
+            data=[
+                0x7E, 0x3F, 0x06, 0x02, 0x42,
+                0x60, 0x01, 0x00, 0x00,
+                0x03, 0x00, 0x02, 0x00,
+            ],
+        )
+
+        version = sq64.get_firmware_version(
+            RecordingPort([other_korg, sq64_reply]), RecordingPort()
+        )
+
+        self.assertEqual(version, "2.03")
+
+    def test_get_firmware_version_rejects_truncated_sq64_reply(self):
+        reply = mido.Message(
+            "sysex",
+            data=[
+                0x7E, 0x30, 0x06, 0x02, 0x42,
+                0x60, 0x01, 0x00, 0x00,
+            ],
+        )
+
+        with self.assertRaisesRegex(RuntimeError, "reply length 9"):
+            sq64.get_firmware_version(
+                RecordingPort([reply]), RecordingPort()
+            )
+
+    @patch("sq64.time.sleep")
+    @patch("sq64.time.monotonic", side_effect=[10.0, 10.0, 10.6])
+    def test_get_firmware_version_times_out(self, _monotonic, sleep):
+        with self.assertRaisesRegex(TimeoutError, "firmware version"):
+            sq64.get_firmware_version(
+                RecordingPort(), RecordingPort(), timeout=0.5
+            )
+
+        sleep.assert_called_once_with(0.001)
+
 
 class SysexTests(unittest.TestCase):
     def test_sq64_sysex_builds_protocol_header_and_payload(self):
