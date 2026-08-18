@@ -398,7 +398,8 @@ def build_reference_structure():
     data[28] = 0x10
 
     for step_number in range(64):
-        note_offset = 32 + step_number * 48
+        step_offset = 32 + step_number * 48
+        note_offset = step_offset
         data[note_offset:note_offset + 5] = bytes([
             48,   # C3
             255,  # Captured modulation/velocity
@@ -406,6 +407,11 @@ def build_reference_structure():
             75,   # Gate length
             0x11, # Trigger + event exists; note is initially off
         ])
+
+        # Step control offset 40: values 19~38 represent probability
+        # 100%~5%. Zero selects the **.* alternation pattern, which mutes
+        # every third pass rather than playing unconditionally.
+        data[step_offset + 40] = 19
 
     return data
 
@@ -586,17 +592,17 @@ def main():
         print("Renaming project to BLUE PANDA...")
         project[4:20] = b"BLUE PANDA".ljust(16, b"\0")
 
-        print("Sending Track A / Pattern 1...")
-        send_pattern(
-            inp,
-            out,
-            project,
-            pattern,
-            melody_patterns,
-            rhythm_patterns,
-        )
+        # print("Sending Track A / Pattern 1...")
+        # send_pattern(
+        #     inp,
+        #     out,
+        #     project,
+        #     pattern,
+        #     melody_patterns,
+        #     rhythm_patterns,
+        # )
 
-        print("Done.")
+        print("Done (pattern send is disabled).")
 
 
 if __name__ == "__main__":
