@@ -6,7 +6,7 @@ import sq64
 from sq64_client import SQ64Client
 
 
-__version__ = "0.1.1"
+__version__ = "0.1.2"
 
 
 def parse_args():
