@@ -29,6 +29,23 @@ clearing unrelated patterns, the utility first downloads every existing
 melodic and rhythm pattern, replaces A1 locally, and uploads the complete set
 again.
 
+## Edit buffer and saved projects
+
+The SQ-64 keeps the project currently being edited in a temporary **edit
+buffer**. This buffer contains the active project settings and its melodic and
+rhythm patterns. The SQ-64 also has 64 **saved project slots** in internal
+memory. Those stored slots are separate from the active edit buffer.
+
+This app reads and writes only the current edit buffer, using the Current
+Project SysEx messages (`0x11` and `0x41`). It does not write a saved project
+slot with the ROM Project message (`0x4D`). Consequently, an update can be
+returned by a subsequent dump while the SQ-64's saved project name and pattern
+name remain unchanged. Reloading a saved project or restarting the SQ-64 may
+discard the edit-buffer changes.
+
+Use the SQ-64's own project-save workflow if you want to preserve an updated
+edit buffer in internal memory. Back up important projects before doing so.
+
 ## Generated pattern
 
 The pattern is named `PYTHON TEST`, uses 16 steps, and is configured for equal
