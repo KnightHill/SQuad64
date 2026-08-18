@@ -1,5 +1,8 @@
 import time
+
 import mido
+
+from progress import PatternDumpIndicator
 
 
 # ------------------------------------------------------------
@@ -76,86 +79,6 @@ def find_sq64_ports():
     input_name = midi_out_2_inputs[0] if midi_out_2_inputs else inputs[-1]
 
     return input_name, sequence_outputs[0]
-
-
-class SQ64Client:
-    """Operate one SQ-64 through an open pair of MIDI ports."""
-
-    def __init__(self, inport, outport, global_channel=None):
-        if global_channel is None:
-            global_channel = GLOBAL_CHANNEL
-
-        if (
-            not isinstance(global_channel, int)
-            or not 0 <= global_channel <= 15
-        ):
-            raise ValueError("SQ-64 global channel must be between 0 and 15")
-
-        self.inport = inport
-        self.outport = outport
-        self.global_channel = global_channel
-
-    def sysex(self, function, extra=()):
-        """Build a SysEx message addressed to this SQ-64."""
-        return sq64_sysex(function, extra, self.global_channel)
-
-    def wait_for_function(self, wanted, timeout=5.0):
-        """Wait for a function response from this SQ-64."""
-        return wait_for_function(
-            self.inport,
-            wanted,
-            timeout,
-            global_channel=self.global_channel,
-        )
-
-    def wait_for_ack(self, context="data transfer", timeout=10.0):
-        """Wait for an acknowledgement from this SQ-64."""
-        return wait_for_ack(
-            self.inport,
-            context,
-            timeout,
-            global_channel=self.global_channel,
-        )
-
-    def get_firmware_version(self, timeout=5.0):
-        """Request and return this SQ-64's firmware version."""
-        return get_firmware_version(self.inport, self.outport, timeout)
-
-    def read_pattern_dump(self, request_func, dump_func, selector,
-                          packed_size, unpacked_size, expected_signature):
-        """Request, validate, and unpack one pattern from this SQ-64."""
-        return read_pattern_dump(
-            self.inport,
-            self.outport,
-            request_func,
-            dump_func,
-            selector,
-            packed_size,
-            unpacked_size,
-            expected_signature,
-            global_channel=self.global_channel,
-        )
-
-    def read_current_project(self):
-        """Read this SQ-64's current project and populated patterns."""
-        return read_current_project(
-            self.inport,
-            self.outport,
-            global_channel=self.global_channel,
-        )
-
-    def send_pattern(self, project, pattern,
-                     melody_patterns, rhythm_patterns):
-        """Replace A1 while preserving this SQ-64's other patterns."""
-        return send_pattern(
-            self.inport,
-            self.outport,
-            project,
-            pattern,
-            melody_patterns,
-            rhythm_patterns,
-            global_channel=self.global_channel,
-        )
 
 
 def get_firmware_version(inport, outport, timeout=5.0):
@@ -248,11 +171,15 @@ def get_function(msg, global_channel=None):
     return d[5]
 
 
-def wait_for_function(port, wanted, timeout=5.0, *, global_channel=None):
+def wait_for_function(port, wanted, timeout=5.0, *, global_channel=None,
+                      progress=None):
     """Wait for an SQ-64 SysEx function or raise on timeout or NAK."""
     deadline = time.monotonic() + timeout
 
     while time.monotonic() < deadline:
+        if progress is not None:
+            progress()
+
         msg = port.poll()
 
         if msg is None:
@@ -363,13 +290,15 @@ def unpack_7bit(data, expected_size):
 
 def read_pattern_dump(inport, outport, request_func, dump_func,
                       selector, packed_size, unpacked_size,
-                      expected_signature, *, global_channel=None):
+                      expected_signature, *, global_channel=None,
+                      progress=None):
     """Request, validate, and unpack one SQ-64 pattern."""
     outport.send(sq64_sysex(request_func, [selector], global_channel))
     msg = wait_for_function(
         inport,
         dump_func,
         global_channel=global_channel,
+        progress=progress,
     )
 
     response = list(msg.data)[6:]
@@ -431,6 +360,8 @@ def read_current_project(inport, outport, *, global_channel=None):
                 "Warning: SQ-64 did not acknowledge project-read finalize"
             )
 
+    indicator = PatternDumpIndicator()
+
     try:
         msg = wait_for_function(
             inport,
@@ -461,9 +392,9 @@ def read_current_project(inport, outport, *, global_channel=None):
                     continue
 
                 selector = (track << 4) | pattern_number
-                print(
-                    f"  Dumping Track {chr(ord('A') + track)} / "
-                    f"Pattern {pattern_number + 1}..."
+                indicator.start(
+                    f"Track {chr(ord('A') + track)} / "
+                    f"Pattern {pattern_number + 1}"
                 )
                 melody_patterns[(track, pattern_number)] = read_pattern_dump(
                     inport,
@@ -475,7 +406,9 @@ def read_current_project(inport, outport, *, global_channel=None):
                     3104,
                     b"PATT",
                     global_channel=global_channel,
+                    progress=indicator.update,
                 )
+                indicator.complete()
 
         rhythm_patterns = {}
 
@@ -486,7 +419,7 @@ def read_current_project(inport, outport, *, global_channel=None):
             if not project[presence_offset] & (1 << presence_bit):
                 continue
 
-            print(f"  Dumping Track D / Pattern {pattern_number + 1}...")
+            indicator.start(f"Track D / Pattern {pattern_number + 1}")
             rhythm_patterns[pattern_number] = read_pattern_dump(
                 inport,
                 outport,
@@ -497,8 +430,11 @@ def read_current_project(inport, outport, *, global_channel=None):
                 6176,
                 b"PATR",
                 global_channel=global_channel,
+                progress=indicator.update,
             )
+            indicator.complete()
     except BaseException:
+        indicator.finish(success=False)
         # Preserve the original read/validation failure if cleanup also fails.
         try:
             finalize_transaction()
@@ -509,6 +445,7 @@ def read_current_project(inport, outport, *, global_channel=None):
             )
         raise
     else:
+        indicator.finish()
         finalize_transaction()
 
     return project, melody_patterns, rhythm_patterns

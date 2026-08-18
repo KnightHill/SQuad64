@@ -1,9 +1,12 @@
+import io
 import unittest
 from unittest.mock import ANY, Mock, patch
 
 import mido
 
+import progress
 import sq64
+from sq64_client import SQ64Client
 
 
 class RecordingPort:
@@ -16,6 +19,11 @@ class RecordingPort:
 
     def send(self, message):
         self.sent.append(message)
+
+
+class TtyBuffer(io.StringIO):
+    def isatty(self):
+        return True
 
 
 def response(function, extra=()):
@@ -142,7 +150,7 @@ class ClientTests(unittest.TestCase):
             sq64.FUNC_ACK,
             global_channel=15,
         )
-        client = sq64.SQ64Client(
+        client = SQ64Client(
             RecordingPort([reply]),
             RecordingPort(),
             global_channel=15,
@@ -155,7 +163,7 @@ class ClientTests(unittest.TestCase):
 
     def test_client_uses_module_default_channel(self):
         with patch.object(sq64, "GLOBAL_CHANNEL", 4):
-            client = sq64.SQ64Client(RecordingPort(), RecordingPort())
+            client = SQ64Client(RecordingPort(), RecordingPort())
 
         self.assertEqual(client.global_channel, 4)
 
@@ -163,7 +171,7 @@ class ClientTests(unittest.TestCase):
         for channel in (-1, 16, "1"):
             with self.subTest(channel=channel):
                 with self.assertRaisesRegex(ValueError, "between 0 and 15"):
-                    sq64.SQ64Client(
+                    SQ64Client(
                         RecordingPort(),
                         RecordingPort(),
                         global_channel=channel,
@@ -173,7 +181,7 @@ class ClientTests(unittest.TestCase):
     def test_client_firmware_query_uses_owned_ports(self, get_version):
         inport = RecordingPort()
         outport = RecordingPort()
-        client = sq64.SQ64Client(inport, outport)
+        client = SQ64Client(inport, outport)
 
         self.assertEqual(client.get_firmware_version(timeout=1.5), "2.04")
         get_version.assert_called_once_with(inport, outport, 1.5)
@@ -185,7 +193,7 @@ class ClientTests(unittest.TestCase):
     ):
         inport = RecordingPort()
         outport = RecordingPort()
-        client = sq64.SQ64Client(inport, outport, global_channel=6)
+        client = SQ64Client(inport, outport, global_channel=6)
 
         result = client.read_current_project()
         client.send_pattern(b"project", b"pattern", {}, {})
@@ -235,6 +243,7 @@ class SysexTests(unittest.TestCase):
         )
 
     def test_wait_for_function_ignores_unrelated_messages(self):
+        progress = Mock()
         port = RecordingPort(
             [
                 mido.Message("clock"),
@@ -243,9 +252,14 @@ class SysexTests(unittest.TestCase):
             ]
         )
 
-        message = sq64.wait_for_function(port, sq64.FUNC_ACK)
+        message = sq64.wait_for_function(
+            port,
+            sq64.FUNC_ACK,
+            progress=progress,
+        )
 
         self.assertEqual(message, response(sq64.FUNC_ACK))
+        self.assertEqual(progress.call_count, 3)
 
     def test_wait_for_function_raises_for_device_error(self):
         port = RecordingPort([response(sq64.FUNC_FORMAT_ERROR)])
@@ -392,8 +406,10 @@ class ReadTests(unittest.TestCase):
         rhythm = bytearray(b"PATR")
         read_pattern_dump.side_effect = [melody_a, melody_b, rhythm]
         outport = RecordingPort()
+        terminal = TtyBuffer()
 
-        result = sq64.read_current_project(Mock(), outport)
+        with patch.object(progress.sys, "stdout", terminal):
+            result = sq64.read_current_project(Mock(), outport)
 
         self.assertEqual(
             result,
@@ -407,6 +423,12 @@ class ReadTests(unittest.TestCase):
             [args.args[4] for args in read_pattern_dump.call_args_list],
             [0x02, 0x19, 0x04],
         )
+        output = terminal.getvalue()
+        self.assertIn("\r  ⠋ Dumping Track A / Pattern 3...", output)
+        self.assertIn("Dumping Track B / Pattern 10...", output)
+        self.assertIn("Dumping Track D / Pattern 5...", output)
+        self.assertIn("✓ Dumped 3 patterns.", output)
+        self.assertEqual(output.count("\n"), 1)
         wait_for_ack.assert_called_once()
 
     @patch("sq64.wait_for_ack")

@@ -3,6 +3,7 @@ import argparse
 import mido
 
 import sq64
+from sq64_client import SQ64Client
 
 
 __version__ = "0.1.1"
@@ -43,7 +44,7 @@ def main():
         mido.open_input(input_name) as inp,
         mido.open_output(output_name) as out
     ):
-        client = sq64.SQ64Client(inp, out)
+        client = SQ64Client(inp, out)
 
         print("\nReading current project and existing patterns...")
         project, melody_patterns, rhythm_patterns = (
