@@ -10,8 +10,11 @@ KORG_ID = 0x42
 SQ64_ID = [0x00, 0x01, 0x60]
 
 FUNC_CURRENT_PROJECT_REQUEST = 0x11
+FUNC_MELODY_PATTERN_REQUEST  = 0x18
+FUNC_RHYTHM_PATTERN_REQUEST  = 0x19
 FUNC_CURRENT_PROJECT_DUMP    = 0x41
 FUNC_MELODY_PATTERN_DUMP     = 0x48
+FUNC_RHYTHM_PATTERN_DUMP     = 0x49
 FUNC_FINALIZE                = 0x70
 
 FUNC_ACK         = 0x23
@@ -48,7 +51,22 @@ def find_sq64_ports():
     if not outputs:
         raise RuntimeError("No SQ-64 MIDI output port found")
 
-    return inputs[0], outputs[0]
+    # On this SQ-64 ALSA USB layout, MIDI OUT 2 carries SysEx responses
+    # from the device, while SEQ is the endpoint used to send sequencer
+    # and SysEx data to it. ALSA exposes the OUT endpoints in both lists,
+    # so selecting the first matching port silently routes requests nowhere.
+    sequence_outputs = [p for p in outputs if "SEQ" in p.upper()]
+
+    if not sequence_outputs:
+        raise RuntimeError("No SQ-64 SEQ MIDI output port found")
+
+    midi_out_2_inputs = [
+        p for p in inputs
+        if "MIDI OUT 2" in p.upper()
+    ]
+    input_name = midi_out_2_inputs[0] if midi_out_2_inputs else inputs[-1]
+
+    return input_name, sequence_outputs[0]
 
 
 # ------------------------------------------------------------
@@ -190,34 +208,178 @@ def unpack_7bit(data, expected_size):
 # Read current SQ-64 project header
 # ------------------------------------------------------------
 
-def read_current_project_header(inport, outport):
+def read_pattern_dump(inport, outport, request_func, dump_func,
+                      selector, packed_size, unpacked_size,
+                      expected_signature):
+    outport.send(sq64_sysex(request_func, [selector]))
+    msg = wait_for_function(inport, dump_func)
+
+    response = list(msg.data)[6:]
+
+    if not response or response[0] != selector:
+        actual = response[0] if response else None
+        raise RuntimeError(
+            f"Expected pattern selector 0x{selector:02X}, got {actual!r}"
+        )
+
+    packed = response[1:]
+
+    if len(packed) != packed_size:
+        raise RuntimeError(
+            f"Expected {packed_size} pattern bytes, got {len(packed)}"
+        )
+
+    pattern = unpack_7bit(packed, unpacked_size)
+
+    if len(pattern) != unpacked_size:
+        raise RuntimeError(
+            f"Expected {unpacked_size} unpacked pattern bytes, "
+            f"got {len(pattern)}"
+        )
+
+    if pattern[:4] != expected_signature:
+        raise RuntimeError(
+            f"Invalid SQ-64 pattern signature {bytes(pattern[:4])!r}; "
+            f"expected {expected_signature!r}"
+        )
+
+    return pattern
+
+
+def read_current_project(inport, outport):
     # Request current project.
     outport.send(
         sq64_sysex(FUNC_CURRENT_PROJECT_REQUEST)
     )
 
-    msg = wait_for_function(
-        inport,
-        FUNC_CURRENT_PROJECT_DUMP
-    )
+    def finalize_transaction():
+        outport.send(sq64_sysex(FUNC_FINALIZE))
 
-    packed = list(msg.data)[6:]
+        try:
+            wait_for_ack(inport)
+        except TimeoutError:
+            # Some SQ-64 v2.x units leave transmitting-project mode without
+            # returning the documented ACK. The finalize message was still
+            # sent, and a missing response is safe to tolerate for a read.
+            print(
+                "Warning: SQ-64 did not acknowledge project-read finalize"
+            )
 
-    if len(packed) != 586:
-        raise RuntimeError(
-            f"Expected 586 project bytes, got {len(packed)}"
+    try:
+        msg = wait_for_function(
+            inport,
+            FUNC_CURRENT_PROJECT_DUMP
         )
 
-    project = unpack_7bit(packed, 512)
+        packed = list(msg.data)[6:]
 
-    if project[:4] != b"PROJ":
-        raise RuntimeError("Invalid SQ-64 project data")
+        if len(packed) != 586:
+            raise RuntimeError(
+                f"Expected 586 project bytes, got {len(packed)}"
+            )
 
-    # End the read-project transaction.
-    outport.send(sq64_sysex(FUNC_FINALIZE))
-    wait_for_ack(inport)
+        project = unpack_7bit(packed, 512)
 
-    return project
+        if len(project) != 512 or project[:4] != b"PROJ":
+            raise RuntimeError("Invalid SQ-64 project data")
+
+        melody_patterns = {}
+
+        for track in range(3):
+            for pattern_number in range(16):
+                presence_offset = 40 + track * 2 + pattern_number // 8
+                presence_bit = pattern_number % 8
+
+                if not project[presence_offset] & (1 << presence_bit):
+                    continue
+
+                selector = (track << 4) | pattern_number
+                print(
+                    f"  Dumping Track {chr(ord('A') + track)} / "
+                    f"Pattern {pattern_number + 1}..."
+                )
+                melody_patterns[(track, pattern_number)] = read_pattern_dump(
+                    inport,
+                    outport,
+                    FUNC_MELODY_PATTERN_REQUEST,
+                    FUNC_MELODY_PATTERN_DUMP,
+                    selector,
+                    3548,
+                    3104,
+                    b"PATT",
+                )
+
+        rhythm_patterns = {}
+
+        for pattern_number in range(16):
+            presence_offset = 46 + pattern_number // 8
+            presence_bit = pattern_number % 8
+
+            if not project[presence_offset] & (1 << presence_bit):
+                continue
+
+            print(f"  Dumping Track D / Pattern {pattern_number + 1}...")
+            rhythm_patterns[pattern_number] = read_pattern_dump(
+                inport,
+                outport,
+                FUNC_RHYTHM_PATTERN_REQUEST,
+                FUNC_RHYTHM_PATTERN_DUMP,
+                pattern_number,
+                7059,
+                6176,
+                b"PATR",
+            )
+    except BaseException:
+        # Preserve the original read/validation failure if cleanup also fails.
+        try:
+            finalize_transaction()
+        except Exception as cleanup_error:
+            print(
+                "Warning: failed to finalize SQ-64 project read: "
+                f"{cleanup_error}"
+            )
+        raise
+    else:
+        finalize_transaction()
+
+    return project, melody_patterns, rhythm_patterns
+
+
+def decode_name(data):
+    return bytes(data[4:20]).decode("ascii", errors="replace").rstrip()
+
+
+def print_project_dump(project, melody_patterns, rhythm_patterns):
+    project_name = decode_name(project)
+    tempo = (project[20] | project[21] << 8) / 10
+
+    print("\nProject dump:")
+    print("  Name   :", project_name or "(unnamed)")
+    print(f"  Tempo  : {tempo:.1f} BPM")
+    print("  Header : 512 bytes")
+
+    if not melody_patterns and not rhythm_patterns:
+        print("  Patterns: none")
+        return
+
+    print("  Patterns:")
+
+    for (track, pattern_number), pattern in sorted(
+        melody_patterns.items()
+    ):
+        name = decode_name(pattern) or "(unnamed)"
+        print(
+            f"    Track {chr(ord('A') + track)} / "
+            f"Pattern {pattern_number + 1}: {name}, "
+            f"{pattern[20]} steps, {len(pattern)} bytes"
+        )
+
+    for pattern_number, pattern in sorted(rhythm_patterns.items()):
+        name = decode_name(pattern) or "(unnamed)"
+        print(
+            f"    Track D / Pattern {pattern_number + 1}: {name}, "
+            f"{pattern[20]} steps, {len(pattern)} bytes"
+        )
 
 
 # ------------------------------------------------------------
@@ -313,7 +475,8 @@ def build_pattern():
 # Send project + pattern
 # ------------------------------------------------------------
 
-def send_pattern(inport, outport, project, pattern):
+def send_pattern(inport, outport, project, pattern,
+                 melody_patterns, rhythm_patterns):
     #
     # 1. CURRENT PROJECT DATA DUMP
     #
@@ -336,24 +499,40 @@ def send_pattern(inport, outport, project, pattern):
     # tt = 0 -> Track A
     # pp = 0 -> Pattern 1
     #
-    track = 0
-    pattern_number = 0
+    melody_patterns[(0, 0)] = pattern
 
-    selector = (track << 4) | pattern_number
+    for (track, pattern_number), melody_pattern in sorted(
+        melody_patterns.items()
+    ):
+        selector = (track << 4) | pattern_number
+        pattern_packed = pack_7bit(melody_pattern)
 
-    pattern_packed = pack_7bit(pattern)
+        if len(melody_pattern) != 3104 or len(pattern_packed) != 3548:
+            raise RuntimeError("Invalid melodic pattern size")
 
-    assert len(pattern) == 3104
-    assert len(pattern_packed) == 3548
-
-    outport.send(
-        sq64_sysex(
-            FUNC_MELODY_PATTERN_DUMP,
-            [selector, *pattern_packed]
+        outport.send(
+            sq64_sysex(
+                FUNC_MELODY_PATTERN_DUMP,
+                [selector, *pattern_packed]
+            )
         )
-    )
 
-    wait_for_ack(inport)
+        wait_for_ack(inport)
+
+    for pattern_number, rhythm_pattern in sorted(rhythm_patterns.items()):
+        pattern_packed = pack_7bit(rhythm_pattern)
+
+        if len(rhythm_pattern) != 6176 or len(pattern_packed) != 7059:
+            raise RuntimeError("Invalid rhythm pattern size")
+
+        outport.send(
+            sq64_sysex(
+                FUNC_RHYTHM_PATTERN_DUMP,
+                [pattern_number, *pattern_packed]
+            )
+        )
+
+        wait_for_ack(inport)
 
     #
     # 3. Finalize project transfer
@@ -380,18 +559,28 @@ def main():
         mido.open_input(input_name) as inp,
         mido.open_output(output_name) as out
     ):
-        print("\nReading current project header...")
-        project = read_current_project_header(inp, out)
+        print("\nReading current project and existing patterns...")
+        project, melody_patterns, rhythm_patterns = read_current_project(
+            inp,
+            out,
+        )
+        print_project_dump(project, melody_patterns, rhythm_patterns)
 
         print("Building test pattern...")
         pattern = build_pattern()
 
-        print("Sending Track A / Pattern 1...")
-        send_pattern(inp, out, project, pattern)
+        # print("Sending Track A / Pattern 1...")
+        # send_pattern(
+        #     inp,
+        #     out,
+        #     project,
+        #     pattern,
+        #     melody_patterns,
+        #     rhythm_patterns,
+        # )
 
-        print("Done.")
+        print("Done (pattern send is disabled).")
 
 
 if __name__ == "__main__":
     main()
-
