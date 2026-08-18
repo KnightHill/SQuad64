@@ -1,8 +1,7 @@
 # Korg SQ-64 Pattern Sender
 
-This small Python utility generates a 16-step monophonic C-major test pattern,
-writes it to **Track A, Pattern 1**, and renames the current project to
-`BLUE PANDA` on a connected Korg SQ-64.
+This small Python utility generates a 16-step monophonic C-major test pattern
+and writes it to **Track A, Pattern 1** on a connected Korg SQ-64.
 
 The SQ-64 SysEx protocol transfers patterns as part of a project transaction;
 it does not provide an isolated single-pattern write operation. To avoid
@@ -54,8 +53,7 @@ to the sequencer. It then:
 
 1. Downloads the current project header.
 2. Downloads all patterns marked as present in the project.
-3. Builds the test pattern, replaces Track A, Pattern 1 in memory, and changes
-   the project name to `BLUE PANDA`.
+3. Builds the test pattern and replaces Track A, Pattern 1 in memory.
 4. Uploads the project header and every preserved pattern.
 5. Finalizes the project transfer.
 

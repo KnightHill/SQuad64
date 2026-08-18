@@ -349,6 +349,24 @@ def decode_name(data):
     return bytes(data[4:20]).decode("ascii", errors="replace").rstrip()
 
 
+def render_melody_steps(pattern):
+    symbols = []
+
+    for step_number in range(pattern[20]):
+        step_offset = 32 + step_number * 48
+        step_enabled = bool(pattern[step_offset + 47] & 1)
+        has_note = any(
+            pattern[step_offset + note_number * 5 + 4] & (1 << 3)
+            for note_number in range(8)
+        )
+        symbols.append("■" if step_enabled and has_note else " ")
+
+    return [
+        "".join(symbols[start:start + 16])
+        for start in range(0, len(symbols), 16)
+    ]
+
+
 def print_project_dump(project, melody_patterns, rhythm_patterns):
     project_name = decode_name(project)
     tempo = (project[20] | project[21] << 8) / 10
@@ -373,6 +391,9 @@ def print_project_dump(project, melody_patterns, rhythm_patterns):
             f"Pattern {pattern_number + 1}: {name}, "
             f"{pattern[20]} steps, {len(pattern)} bytes"
         )
+
+        for row in render_melody_steps(pattern):
+            print(f"      |{row:<16}|")
 
     for pattern_number, pattern in sorted(rhythm_patterns.items()):
         name = decode_name(pattern) or "(unnamed)"
@@ -589,8 +610,8 @@ def main():
         print("Building replicated test pattern locally...")
         pattern = build_pattern()
 
-        print("Renaming project to BLUE PANDA...")
-        project[4:20] = b"BLUE PANDA".ljust(16, b"\0")
+        # print("Renaming project to BLUE PANDA...")
+        # project[4:20] = b"BLUE PANDA".ljust(16, b"\0")
 
         # print("Sending Track A / Pattern 1...")
         # send_pattern(
