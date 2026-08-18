@@ -47,15 +47,31 @@ Connect and power on the SQ-64, then run:
 .venv/bin/python main.py
 ```
 
+This is read-only: it dumps and displays the current project without writing
+to the SQ-64. To replace Track A, Pattern 1, run:
+
+```bash
+.venv/bin/python main.py --update
+```
+
+The short form `-u` is equivalent.
+
+Display the application version with:
+
+```bash
+.venv/bin/python main.py --version
+```
+
 The program lists the available MIDI ports. On the SQ-64 ALSA USB interface it
 prefers `MIDI OUT 2` for device responses and the `SEQ` endpoint for data sent
 to the sequencer. It then:
 
 1. Downloads the current project header.
 2. Downloads all patterns marked as present in the project.
-3. Builds the test pattern and replaces Track A, Pattern 1 in memory.
-4. Uploads the project header and every preserved pattern.
-5. Finalizes the project transfer.
+3. If `--update` is supplied, builds the test pattern and replaces Track A,
+   Pattern 1 in memory.
+4. In update mode, uploads the project header and every preserved pattern.
+5. Finalizes each project transfer.
 
 Do not disconnect or power off the SQ-64 during the transfer. Although the
 utility preserves other patterns according to Korg's documented protocol,

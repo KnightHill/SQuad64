@@ -1,5 +1,9 @@
+import argparse
 import time
 import mido
+
+
+__version__ = "0.1.0"
 
 
 # ------------------------------------------------------------
@@ -589,7 +593,29 @@ def send_pattern(inport, outport, project, pattern,
 # Main
 # ------------------------------------------------------------
 
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description=(
+            "Dump the current SQ-64 project and optionally replace "
+            "Track A / Pattern 1."
+        )
+    )
+    parser.add_argument(
+        "-u",
+        "--update",
+        action="store_true",
+        help="update Track A / Pattern 1 after dumping the project",
+    )
+    parser.add_argument(
+        "--version",
+        action="version",
+        version=f"%(prog)s {__version__}",
+    )
+    return parser.parse_args()
+
+
 def main():
+    args = parse_args()
     input_name, output_name = find_sq64_ports()
 
     print()
@@ -607,23 +633,27 @@ def main():
         )
         print_project_dump(project, melody_patterns, rhythm_patterns)
 
+        if not args.update:
+            print("\nDone (read-only; use --update to write the pattern).")
+            return
+
         print("Building replicated test pattern locally...")
         pattern = build_pattern()
 
         # print("Renaming project to BLUE PANDA...")
         # project[4:20] = b"BLUE PANDA".ljust(16, b"\0")
 
-        # print("Sending Track A / Pattern 1...")
-        # send_pattern(
-        #     inp,
-        #     out,
-        #     project,
-        #     pattern,
-        #     melody_patterns,
-        #     rhythm_patterns,
-        # )
+        print("Sending Track A / Pattern 1...")
+        send_pattern(
+            inp,
+            out,
+            project,
+            pattern,
+            melody_patterns,
+            rhythm_patterns,
+        )
 
-        print("Done (pattern send is disabled).")
+        print("Done.")
 
 
 if __name__ == "__main__":
