@@ -1,34 +1,25 @@
 # SQuad64
 
-SQuad64 is a pattern and project utility for the Korg SQ-64. It can inspect the
-current project and generate a 16-step monophonic C-major test pattern for
-**Track A, Pattern 1**.
+SQuad64 is a Python utility for inspecting and editing projects on the Korg
+SQ-64. It communicates with the sequencer over MIDI SysEx.
 
 ## Disclaimer
 
 This project is not affiliated with, endorsed by, or sponsored by Korg Inc. in
 any way. It is experimental software provided as-is and used entirely at your
-own risk. The author is not liable for damage to equipment, loss or corruption
-of projects or other data, or any other direct or indirect damages resulting
-from its use. Back up important SQ-64 projects before enabling updates.
+own risk. Back up important SQ-64 projects before using development features.
 
-## License
+## Applications
 
-This project is source-available under the
-[PolyForm Noncommercial License 1.0.0](LICENSE.md). You may use, study, modify,
-and redistribute the software for permitted noncommercial purposes, subject to
-the complete license terms and notice requirements.
+The repository contains two command-line applications:
 
-Commercial use is not granted by this license. This project should therefore
-not be described as OSI-approved open-source software; it is source-available
-software for noncommercial use. Contact the author if you need separate
-permission for commercial use.
+- `squad64-dump` (`dump.py`) reads and displays the current SQ-64 project. It
+  is read-only and cannot update the device.
+- `squad64-edit` (`edit.py`) is the developing pattern editor. It currently
+  reads a selected melodic track and pattern; editing behavior is still under
+  development.
 
-The SQ-64 SysEx protocol transfers patterns as part of a project transaction;
-it does not provide an isolated single-pattern write operation. To avoid
-clearing unrelated patterns, the utility first downloads every existing
-melodic and rhythm pattern, replaces A1 locally, and uploads the complete set
-again.
+The applications share their version in [`version.py`](version.py).
 
 ## Edit buffer and saved projects
 
@@ -37,34 +28,9 @@ buffer**. This buffer contains the active project settings and its melodic and
 rhythm patterns. The SQ-64 also has 64 **saved project slots** in internal
 memory. Those stored slots are separate from the active edit buffer.
 
-This app reads and writes only the current edit buffer, using the Current
-Project SysEx messages (`0x11` and `0x41`). It does not write a saved project
-slot with the ROM Project message (`0x4D`). Consequently, an update can be
-returned by a subsequent dump while the SQ-64's saved project name and pattern
-name remain unchanged. Reloading a saved project or restarting the SQ-64 may
-discard the edit-buffer changes.
-
-Use the SQ-64's own project-save workflow if you want to preserve an updated
-edit buffer in internal memory. Back up important projects before doing so.
-
-## Generated pattern
-
-The pattern is named `SQUAD64 TEST`, uses 16 steps, and is configured for equal
-temperament with C as its root in MONO mode.
-
-```text
-C3  -  E3  -  G3  -  E3  -
-C4  -  G3  -  E3  -  D3  -
-```
-
-Velocity, gate, timing, and other event parameters reproduce the reference
-Track A, Pattern 1 structure captured from the SQ-64. The pattern is generated
-locally and does not clone an existing pattern at runtime. MIDI note numbers
-are used, with C3 represented as note 48.
-
-The sequence is defined by `TEST_PATTERN_NOTES` in [`main.py`](main.py) and is
-passed to `build_pattern(notes)`. Use `None` for a rest and MIDI note numbers
-from `0` through `127` for played steps.
+The tools use the Current Project SysEx messages (`0x11` and `0x41`). They do
+not write a saved project slot with the ROM Project message (`0x4D`). Reloading
+a saved project or restarting the SQ-64 may discard edit-buffer changes.
 
 ## Requirements
 
@@ -78,69 +44,50 @@ Install the Python dependencies in a virtual environment:
 
 ```bash
 python3 -m venv .venv
-.venv/bin/pip install mido python-rtmidi
-. .venv/bin/activate
+.venv/bin/python -m pip install mido python-rtmidi
 ```
 
 ## Usage
 
-Connect and power on the SQ-64, then run:
+Connect and power on the SQ-64, then dump the current project:
 
 ```bash
-./squad64
+./dump.py
 ```
 
-This is read-only: it dumps and displays the current project without writing
-to the SQ-64. To replace Track A, Pattern 1, run:
+Display the dump application's version:
 
 ```bash
-./squad64 --update
+./dump.py --version
 ```
 
-The short form `-u` is equivalent.
-
-Display the application version with:
+Display firmware and global settings without downloading the current project:
 
 ```bash
-./squad64 --version
+./dump.py --global
 ```
 
-Display the connected SQ-64 firmware version and its global configuration,
-then exit without downloading the current project:
+Filter the displayed project by track, pattern number, or both:
 
 ```bash
-./squad64 --global
+./dump.py --track B
+./dump.py --pattern 3
+./dump.py --track D --pattern 8
 ```
 
-The short form `-g` is equivalent. Global mode is read-only and cannot be
-combined with `--update`.
+Dump tracks are `A` through `D`, and pattern numbers are `1` through `16`.
+Filters affect only the printed output; the complete project is still read
+from the SQ-64.
 
-Filter the displayed patterns by track, pattern number, or both:
+To use the developing editor, provide both a melodic track and a pattern:
 
 ```bash
-./squad64 --track B
-./squad64 --pattern 3
-./squad64 --track D --pattern 8
+./edit.py --track A --pattern 1
 ```
 
-Tracks are `A` through `D`, and pattern numbers are `1` through `16`. These
-options filter only the printed dump; the complete project is still downloaded
-so update mode can preserve patterns that are not displayed.
-
-Use `--verbose` to list the available MIDI ports while connecting. On the
-SQ-64 ALSA USB interface the program prefers `MIDI OUT 2` for device responses
-and the `SEQ` endpoint for data sent to the sequencer. It then:
-
-1. Downloads the current project header.
-2. Downloads all patterns marked as present in the project.
-3. If `--update` is supplied, builds the test pattern and replaces Track A,
-   Pattern 1 in memory.
-4. In update mode, uploads the project header and every preserved pattern.
-5. Finalizes each project transfer.
-
-Do not disconnect or power off the SQ-64 during the transfer. Although the
-utility preserves other patterns according to Korg's documented protocol,
-backing up important projects before testing is recommended.
+The editor accepts tracks `A` through `C` and pattern numbers `1` through
+`16`. Use `--verbose` with either application to list available MIDI ports
+while connecting.
 
 ## MIDI configuration
 
@@ -148,7 +95,8 @@ The SQ-64 global MIDI channel is currently set by `GLOBAL_CHANNEL` in
 [`sq64.py`](sq64.py). Its value is zero-based: `0` means MIDI channel 1 and
 `15` means MIDI channel 16.
 
-The destination is currently fixed to Track A (`0`) and Pattern 1 (`0`).
+On the SQ-64 ALSA USB interface the program prefers `MIDI OUT 2` for device
+responses and the `SEQ` endpoint for data sent to the sequencer.
 
 ## Official Korg documentation
 
@@ -160,8 +108,6 @@ Revision 1.00 (2023-01-24), published for the version 2.x firmware generation:
 - [System version 2.0 owner's manual](https://www.korg.com/us/support/download/manual/0/872/4926/)
 - [Detailed SQ-64 MIDI Implementation](https://www.korg.com/us/support/download/manual/0/872/5143/)
 - [MIDI Implementation Chart](https://www.korg.com/us/support/download/manual/0/872/4947/)
-- [SQ-64 system updater 2.03 for Windows](https://www.korg.com/us/support/download/software/0/872/4737/)
-- [SQ-64 system updater 2.03 for macOS](https://www.korg.com/us/support/download/software/0/872/4738/)
 - [All SQ-64 support downloads](https://www.korg.com/us/support/download/product/0/872/)
 
 The relevant SysEx functions are:
