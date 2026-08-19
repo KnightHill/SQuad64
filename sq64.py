@@ -55,9 +55,11 @@ SQ64_ID = [0x00, 0x01, 0x60]
 FUNC_CURRENT_PROJECT_REQUEST = 0x11
 FUNC_MELODY_PATTERN_REQUEST  = 0x18
 FUNC_RHYTHM_PATTERN_REQUEST  = 0x19
+FUNC_GLOBAL_DATA_REQUEST     = 0x0E
 FUNC_CURRENT_PROJECT_DUMP    = 0x41
 FUNC_MELODY_PATTERN_DUMP     = 0x48
 FUNC_RHYTHM_PATTERN_DUMP     = 0x49
+FUNC_GLOBAL_DATA_DUMP        = 0x50
 FUNC_FINALIZE                = 0x70
 
 FUNC_ACK         = 0x23
@@ -344,6 +346,204 @@ def unpack_7bit(data: ByteData, expected_size: int) -> bytearray:
                 break
 
     return bytearray(result)
+
+
+# ------------------------------------------------------------
+# Read SQ-64 global data
+# ------------------------------------------------------------
+
+def read_global_data(
+    inport: InputPort,
+    outport: OutputPort,
+    *,
+    global_channel: Optional[int] = None,
+) -> bytearray:
+    """Request, validate, and unpack the SQ-64 global settings."""
+    outport.send(sq64_sysex(
+        FUNC_GLOBAL_DATA_REQUEST,
+        global_channel=global_channel,
+    ))
+    msg = wait_for_function(
+        inport,
+        FUNC_GLOBAL_DATA_DUMP,
+        global_channel=global_channel,
+    )
+    packed = list(msg.data)[6:]
+
+    if len(packed) != 586:
+        raise RuntimeError(
+            f"Expected 586 global data bytes, got {len(packed)}"
+        )
+
+    global_data = unpack_7bit(packed, 512)
+
+    if len(global_data) != 512 or global_data[:4] != b"GLOB":
+        raise RuntimeError("Invalid SQ-64 global data")
+
+    return global_data
+
+
+def _format_table(
+    headers: Sequence[str],
+    rows: Sequence[Sequence[str]],
+) -> str:
+    """Format rows as a compact terminal-friendly table."""
+    widths = [len(header) for header in headers]
+
+    for row in rows:
+        for index, value in enumerate(row):
+            widths[index] = max(widths[index], len(value))
+
+    def format_row(row: Sequence[str]) -> str:
+        return " | ".join(
+            value.ljust(widths[index])
+            for index, value in enumerate(row)
+        )
+
+    separator = "-+-".join("-" * width for width in widths)
+    return "\n".join([
+        format_row(headers),
+        separator,
+        *(format_row(row) for row in rows),
+    ])
+
+
+def print_global_data(global_data: ByteData) -> None:
+    """Print decoded SQ-64 global settings as readable tables."""
+    if len(global_data) != 512 or bytes(global_data[:4]) != b"GLOB":
+        raise RuntimeError("Invalid SQ-64 global data")
+
+    def choice(value: int, choices: Sequence[str]) -> str:
+        if 0 <= value < len(choices):
+            return choices[value]
+        return f"Unknown ({value})"
+
+    def on_off(value: int) -> str:
+        return choice(value, ("Off", "On"))
+
+    def channel(value: int) -> str:
+        return f"CH{value + 1}"
+
+    def optional_channel(value: int) -> str:
+        return "Subtracks" if value == 0 else f"CH{value}"
+
+    def note_name(value: int) -> str:
+        names = (
+            "C", "C#", "D", "D#", "E", "F",
+            "F#", "G", "G#", "A", "A#", "B",
+        )
+        return f"{names[value % 12]}{value // 12 - 1} ({value})"
+
+    global_rows = [
+        ("Clock source", choice(global_data[4],
+                                 ("Auto", "Internal", "USB", "MIDI"))),
+        ("Sync in rate", choice(global_data[5],
+                                ("Unknown (0)", "4 PPQN", "12 PPQN",
+                                 "24 PPQN", "48 PPQN"))),
+        ("Sync in polarity", choice(global_data[6],
+                                    ("Active high", "Active low"))),
+        ("Sync out rate", choice(global_data[7],
+                                 ("2 PPQN", "4 PPQN", "12 PPQN",
+                                  "24 PPQN", "48 PPQN"))),
+        ("Sync out polarity", choice(global_data[8],
+                                     ("Active high", "Active low"))),
+        ("Sync out transport", on_off(global_data[9])),
+        ("RX transport USB", on_off(global_data[10])),
+        ("RX transport MIDI", on_off(global_data[11])),
+        ("RX program channel",
+         "Any" if global_data[12] == 0 else f"CH{global_data[12]}"),
+        ("RX program USB", on_off(global_data[13])),
+        ("RX program MIDI", on_off(global_data[14])),
+        ("TX transport USB", on_off(global_data[15])),
+        ("TX transport MIDI1", on_off(global_data[16])),
+        ("TX transport MIDI2", on_off(global_data[17])),
+        ("TX program channel", channel(global_data[18])),
+        ("TX program USB", on_off(global_data[19])),
+        ("TX program MIDI1", on_off(global_data[20])),
+        ("TX program MIDI2", on_off(global_data[21])),
+        ("MIDI thru", on_off(global_data[22])),
+        ("Keyboard layout", choice(global_data[23],
+                                   ("Keys", "Isomorphic", "Octaves"))),
+        ("Display brightness", str(global_data[24] + 1)),
+        ("Auto power off", choice(global_data[25],
+                                  ("Disabled", "Enabled"))),
+        ("USB power", choice(global_data[26], ("500 mA", "2 A"))),
+        ("Add gate", on_off(global_data[27])),
+        ("Keyboard behavior", choice(global_data[28],
+                                     ("Transpose", "Overdub", "Overwrite"))),
+        ("Mod display", choice(global_data[29], ("Gates", "Values"))),
+        ("Drum pad layout", choice(global_data[30],
+                                   ("4x4-A", "4x4-B", "16+velocity", "8x2"))),
+        ("Track D gate polarity", choice(global_data[148],
+                                         ("Subtracks", "V-Trig", "S-Trig"))),
+        ("Track D gate range", choice(global_data[149], ("5 V", "10 V"))),
+        ("Track D record quantize", choice(
+            global_data[157],
+            ("Unknown (0)", "None", "1/8 step", "1/4 step",
+             "1/2 step", "1/1 step"),
+        )),
+        ("Control mapping", f"Mapping {global_data[486] + 1}"),
+    ]
+
+    midi_rows = []
+    for track_index, track in enumerate("ABC"):
+        base = 48 + track_index * 32
+        midi_rows.append((
+            track,
+            channel(global_data[base + 13]),
+            on_off(global_data[base + 14]),
+            on_off(global_data[base + 15]),
+            channel(global_data[base + 16]),
+            on_off(global_data[base + 17]),
+            on_off(global_data[base + 18]),
+            on_off(global_data[base + 19]),
+        ))
+
+    midi_rows.append((
+        "D",
+        optional_channel(global_data[150]),
+        on_off(global_data[151]),
+        on_off(global_data[152]),
+        optional_channel(global_data[153]),
+        on_off(global_data[154]),
+        on_off(global_data[155]),
+        on_off(global_data[156]),
+    ))
+
+    control_ports = global_data[485]
+    midi_rows.append((
+        "Control", "—", "—", "—", channel(global_data[484]),
+        on_off(control_ports & 1),
+        on_off((control_ports >> 1) & 1),
+        on_off((control_ports >> 2) & 1),
+    ))
+
+    drum_rows = []
+    for subtrack in range(16):
+        base = 176 + subtrack * 19
+        rx_note = global_data[base + 6]
+        drum_rows.append((
+            f"D{subtrack + 1}",
+            choice(global_data[base + 4], ("V-Trig", "S-Trig")),
+            channel(global_data[base + 5]),
+            "Any" if rx_note == 0 else note_name(rx_note - 1),
+            channel(global_data[base + 7]),
+            note_name(global_data[base + 8]),
+        ))
+
+    print("Global settings:")
+    print(_format_table(("Parameter", "Value"), global_rows))
+    print("\nMIDI routing:")
+    print(_format_table(
+        ("Track", "RX ch", "RX USB", "RX MIDI", "TX ch",
+         "TX USB", "TX MIDI1", "TX MIDI2"),
+        midi_rows,
+    ))
+    print("\nDrum subtracks:")
+    print(_format_table(
+        ("Track", "Gate", "RX ch", "RX note", "TX ch", "TX note"),
+        drum_rows,
+    ))
 
 
 # ------------------------------------------------------------

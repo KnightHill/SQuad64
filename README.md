@@ -105,6 +105,16 @@ Display the application version with:
 ./squad64 --version
 ```
 
+Display the connected SQ-64 firmware version and its global configuration,
+then exit without downloading the current project:
+
+```bash
+./squad64 --global
+```
+
+The short form `-g` is equivalent. Global mode is read-only and cannot be
+combined with `--update`.
+
 Filter the displayed patterns by track, pattern number, or both:
 
 ```bash
