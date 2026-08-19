@@ -1,4 +1,5 @@
 import argparse
+import sys
 
 import mido
 
@@ -56,9 +57,8 @@ def parse_args():
     return parser.parse_args()
 
 
-def main():
-    """Dump the current project and optionally update Track A, Pattern 1."""
-    args = parse_args()
+def run(args):
+    """Run one SQ-64 dump or update operation."""
     input_name, output_name = sq64.find_sq64_ports()
 
     print()
@@ -101,5 +101,22 @@ def main():
         print("Done.")
 
 
+def main():
+    """Run the command-line app with concise operational errors."""
+    args = parse_args()
+
+    try:
+        run(args)
+    except KeyboardInterrupt:
+        print("\nCancelled.", file=sys.stderr)
+        return 130
+    except (ImportError, OSError, RuntimeError) as error:
+        message = str(error) or type(error).__name__
+        print(f"Error: {message}", file=sys.stderr)
+        return 1
+
+    return 0
+
+
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

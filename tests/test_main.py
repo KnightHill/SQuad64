@@ -1,7 +1,7 @@
 import io
 import sys
 import unittest
-from contextlib import redirect_stderr
+from contextlib import redirect_stderr, redirect_stdout
 from unittest.mock import patch
 
 import main
@@ -38,6 +38,72 @@ class ArgumentTests(unittest.TestCase):
                     with redirect_stderr(io.StringIO()):
                         with self.assertRaises(SystemExit):
                             main.parse_args()
+
+
+class ErrorHandlingTests(unittest.TestCase):
+    def setUp(self):
+        self.args = main.argparse.Namespace(
+            update=False,
+            track=None,
+            pattern=None,
+        )
+
+    @patch("main.sq64.find_sq64_ports")
+    @patch("main.parse_args")
+    def test_missing_midi_ports_prints_error_without_traceback(
+        self, parse_args, find_ports
+    ):
+        parse_args.return_value = self.args
+        find_ports.side_effect = RuntimeError(
+            "No SQ-64 MIDI input port found"
+        )
+        errors = io.StringIO()
+
+        with redirect_stderr(errors):
+            status = main.main()
+
+        self.assertEqual(status, 1)
+        self.assertEqual(
+            errors.getvalue(),
+            "Error: No SQ-64 MIDI input port found\n",
+        )
+        self.assertNotIn("Traceback", errors.getvalue())
+
+    @patch("main.mido.open_input", side_effect=OSError("MIDI unavailable"))
+    @patch("main.sq64.find_sq64_ports", return_value=("input", "output"))
+    @patch("main.parse_args")
+    def test_midi_backend_errors_are_user_facing(
+        self, parse_args, _find_ports, _open_input
+    ):
+        parse_args.return_value = self.args
+        errors = io.StringIO()
+
+        with redirect_stdout(io.StringIO()):
+            with redirect_stderr(errors):
+                status = main.main()
+
+        self.assertEqual(status, 1)
+        self.assertEqual(errors.getvalue(), "Error: MIDI unavailable\n")
+
+    @patch("main.sq64.find_sq64_ports", side_effect=KeyboardInterrupt)
+    @patch("main.parse_args")
+    def test_keyboard_interrupt_is_clean(self, parse_args, _find_ports):
+        parse_args.return_value = self.args
+        errors = io.StringIO()
+
+        with redirect_stderr(errors):
+            status = main.main()
+
+        self.assertEqual(status, 130)
+        self.assertEqual(errors.getvalue(), "\nCancelled.\n")
+
+    @patch("main.sq64.find_sq64_ports", side_effect=ValueError("bug"))
+    @patch("main.parse_args")
+    def test_unexpected_errors_are_not_hidden(self, parse_args, _find_ports):
+        parse_args.return_value = self.args
+
+        with self.assertRaisesRegex(ValueError, "bug"):
+            main.main()
 
 
 if __name__ == "__main__":
