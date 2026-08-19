@@ -121,7 +121,7 @@ def run(args):
             track=args.track,
             pattern_number=args.pattern,
         )
-
+        """
         if not args.update:
             print("\nDone (read-only; use --update to write the pattern).")
             return
@@ -136,7 +136,7 @@ def run(args):
             melody_patterns,
             rhythm_patterns,
         )
-
+        """
         print("Done.")
 
 
