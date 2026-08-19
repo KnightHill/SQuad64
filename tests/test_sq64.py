@@ -201,19 +201,27 @@ class ClientTests(unittest.TestCase):
         get_version.assert_called_once_with(inport, outport, 1.5)
 
     @patch("sq64.send_pattern")
+    @patch("sq64.read_global_data", return_value=bytearray(b"GLOB"))
     @patch("sq64.read_current_project", return_value=(b"project", {}, {}))
     def test_client_project_operations_use_owned_ports(
-        self, read_current_project, send_pattern
+        self, read_current_project, read_global_data, send_pattern
     ):
         inport = RecordingPort()
         outport = RecordingPort()
         client = SQ64Client(inport, outport, global_channel=6)
 
         result = client.read_current_project()
+        global_data = client.read_global_data()
         client.send_pattern(b"project", b"pattern", {}, {})
 
         self.assertEqual(result, (b"project", {}, {}))
+        self.assertEqual(global_data, bytearray(b"GLOB"))
         read_current_project.assert_called_once_with(
+            inport,
+            outport,
+            global_channel=6,
+        )
+        read_global_data.assert_called_once_with(
             inport,
             outport,
             global_channel=6,
@@ -325,6 +333,46 @@ class PackingTests(unittest.TestCase):
 
 
 class ReadTests(unittest.TestCase):
+    def test_read_global_data_requests_validates_and_unpacks_dump(self):
+        global_data = bytearray(512)
+        global_data[:4] = b"GLOB"
+        inport = RecordingPort([
+            response(
+                sq64.FUNC_GLOBAL_DATA_DUMP,
+                sq64.pack_7bit(global_data),
+            )
+        ])
+        outport = RecordingPort()
+
+        result = sq64.read_global_data(inport, outport)
+
+        self.assertEqual(result, global_data)
+        self.assertEqual(len(result), 512)
+        self.assertEqual(
+            sq64.get_function(outport.sent[0]),
+            sq64.FUNC_GLOBAL_DATA_REQUEST,
+        )
+
+    def test_read_global_data_rejects_invalid_dump(self):
+        bad_size = RecordingPort([
+            response(sq64.FUNC_GLOBAL_DATA_DUMP, [0])
+        ])
+
+        with self.assertRaisesRegex(RuntimeError, "Expected 586"):
+            sq64.read_global_data(bad_size, RecordingPort())
+
+        bad_signature = bytearray(512)
+        bad_signature[:4] = b"NOPE"
+        inport = RecordingPort([
+            response(
+                sq64.FUNC_GLOBAL_DATA_DUMP,
+                sq64.pack_7bit(bad_signature),
+            )
+        ])
+
+        with self.assertRaisesRegex(RuntimeError, "Invalid SQ-64 global"):
+            sq64.read_global_data(inport, RecordingPort())
+
     def test_read_pattern_dump_sends_selector_and_returns_pattern(self):
         pattern = bytearray(15)
         pattern[:4] = b"PATT"
@@ -463,6 +511,39 @@ class ReadTests(unittest.TestCase):
 
 
 class PatternTests(unittest.TestCase):
+    def test_print_global_data_renders_decoded_tables(self):
+        global_data = bytearray(512)
+        global_data[:4] = b"GLOB"
+        global_data[4] = 2  # USB clock
+        global_data[22] = 1  # MIDI thru
+        global_data[61] = 1  # Track A RX channel 2
+        global_data[62] = 1  # Track A RX USB on
+        global_data[64] = 2  # Track A TX channel 3
+        global_data[176 + 5] = 9  # D1 RX channel 10
+        global_data[176 + 6] = 61  # D1 RX note 60, C4
+        output = io.StringIO()
+
+        with redirect_stdout(output):
+            sq64.print_global_data(global_data)
+
+        rendered = output.getvalue()
+        self.assertIn("Global settings:", rendered)
+        self.assertIn("Clock source", rendered)
+        self.assertIn("USB", rendered)
+        self.assertIn("MIDI thru", rendered)
+        self.assertIn("MIDI routing:", rendered)
+        self.assertIn("RX ch", rendered)
+        self.assertIn("CH2", rendered)
+        self.assertIn("CH3", rendered)
+        self.assertNotIn("Melody CV:", rendered)
+        self.assertIn("Drum subtracks:", rendered)
+        self.assertIn("D1", rendered)
+        self.assertIn("C4 (60)", rendered)
+
+    def test_print_global_data_rejects_invalid_data(self):
+        with self.assertRaisesRegex(RuntimeError, "Invalid SQ-64 global"):
+            sq64.print_global_data(bytearray(512))
+
     def test_decode_name_strips_trailing_spaces(self):
         data = bytearray(20)
         data[4:20] = b"A PATTERN".ljust(16, b" ")
@@ -485,9 +566,24 @@ class PatternTests(unittest.TestCase):
         # A note without an enabled step is a rest.
         pattern[32 + 1 * 48 + 4] = 1 << 3
 
+        rendered = sq64.render_melody_steps(pattern)
+        self.assertEqual(len(rendered), 1)
+        chunks = rendered[0].split("|")
+        self.assertEqual([len(chunk) for chunk in chunks], [16, 4])
+        self.assertEqual(chunks[0][0], "■")
+        self.assertEqual(chunks[1][1], "■")
+
+    def test_render_melody_steps_separates_exact_16_step_groups(self):
+        pattern = bytearray(32 + 17 * 48)
+        pattern[20] = 17
+        for step in (0, 16):
+            offset = 32 + step * 48
+            pattern[offset + 4] = 1 << 3
+            pattern[offset + 47] = 1
+
         self.assertEqual(
-            sq64.render_melody_steps(pattern),
-            ["■               ", " ■  "],
+            [len(chunk) for chunk in sq64.render_melody_steps(pattern)[0].split("|")],
+            [16, 1],
         )
 
     def test_render_rhythm_steps_uses_selected_subtrack(self):
