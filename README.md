@@ -1,7 +1,8 @@
-# Korg SQ-64 Pattern Sender
+# SQuad64
 
-This small Python utility generates a 16-step monophonic C-major test pattern
-and writes it to **Track A, Pattern 1** on a connected Korg SQ-64.
+SQuad64 is a pattern and project utility for the Korg SQ-64. It can inspect the
+current project and generate a 16-step monophonic C-major test pattern for
+**Track A, Pattern 1**.
 
 ## Disclaimer
 
@@ -48,7 +49,7 @@ edit buffer in internal memory. Back up important projects before doing so.
 
 ## Generated pattern
 
-The pattern is named `PYTHON TEST`, uses 16 steps, and is configured for equal
+The pattern is named `SQUAD64 TEST`, uses 16 steps, and is configured for equal
 temperament with C as its root in MONO mode.
 
 ```text
@@ -74,6 +75,7 @@ Install the Python dependencies in a virtual environment:
 ```bash
 python3 -m venv .venv
 .venv/bin/pip install mido python-rtmidi
+. .venv/bin/activate
 ```
 
 ## Usage
@@ -81,14 +83,14 @@ python3 -m venv .venv
 Connect and power on the SQ-64, then run:
 
 ```bash
-.venv/bin/python main.py
+./squad64
 ```
 
 This is read-only: it dumps and displays the current project without writing
 to the SQ-64. To replace Track A, Pattern 1, run:
 
 ```bash
-.venv/bin/python main.py --update
+./squad64 --update
 ```
 
 The short form `-u` is equivalent.
@@ -96,15 +98,15 @@ The short form `-u` is equivalent.
 Display the application version with:
 
 ```bash
-.venv/bin/python main.py --version
+./squad64 --version
 ```
 
 Filter the displayed patterns by track, pattern number, or both:
 
 ```bash
-.venv/bin/python main.py --track B
-.venv/bin/python main.py --pattern 3
-.venv/bin/python main.py --track D --pattern 8
+./squad64 --track B
+./squad64 --pattern 3
+./squad64 --track D --pattern 8
 ```
 
 Tracks are `A` through `D`, and pattern numbers are `1` through `16`. These

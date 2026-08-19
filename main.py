@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 import argparse
 import sys
 
@@ -26,8 +28,9 @@ def pattern_number(value):
 def parse_args():
     """Parse command-line options."""
     parser = argparse.ArgumentParser(
+        prog="squad64",
         description=(
-            "Dump the current SQ-64 project and optionally replace "
+            "SQuad64 dumps the current SQ-64 project and optionally replaces "
             "Track A / Pattern 1."
         )
     )

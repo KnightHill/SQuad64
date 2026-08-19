@@ -569,7 +569,7 @@ class PatternTests(unittest.TestCase):
         expected_notes = [48, 52, 55, 52, 60, 55, 52, 50]
 
         self.assertEqual(len(pattern), 3104)
-        self.assertEqual(sq64.decode_name(pattern), "PYTHON TEST")
+        self.assertEqual(sq64.decode_name(pattern), "SQUAD64 TEST")
         self.assertEqual(sq64.render_melody_steps(pattern), ["■ ■ ■ ■ ■ ■ ■ ■ "])
         for step in range(16):
             offset = 32 + step * 48

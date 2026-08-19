@@ -27,6 +27,17 @@ class ArgumentTests(unittest.TestCase):
         self.assertIsNone(args.track)
         self.assertIsNone(args.pattern)
 
+    def test_version_uses_project_name(self):
+        output = io.StringIO()
+
+        with patch.object(sys, "argv", ["main.py", "--version"]):
+            with redirect_stdout(output):
+                with self.assertRaises(SystemExit) as exit_result:
+                    main.parse_args()
+
+        self.assertEqual(exit_result.exception.code, 0)
+        self.assertEqual(output.getvalue(), "squad64 0.1.2\n")
+
     def test_pattern_must_be_between_one_and_sixteen(self):
         for value in ("0", "17", "not-a-number"):
             with self.subTest(value=value):

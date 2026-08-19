@@ -606,7 +606,7 @@ def build_pattern():
     # Pattern header
     data[0:4] = b"PATT"
 
-    name = b"PYTHON TEST"
+    name = b"SQUAD64 TEST"
     data[4:20] = name.ljust(16, b" ")
 
     # Pattern length
