@@ -566,9 +566,24 @@ class PatternTests(unittest.TestCase):
         # A note without an enabled step is a rest.
         pattern[32 + 1 * 48 + 4] = 1 << 3
 
+        rendered = sq64.render_melody_steps(pattern)
+        self.assertEqual(len(rendered), 1)
+        chunks = rendered[0].split("|")
+        self.assertEqual([len(chunk) for chunk in chunks], [16, 4])
+        self.assertEqual(chunks[0][0], "■")
+        self.assertEqual(chunks[1][1], "■")
+
+    def test_render_melody_steps_separates_exact_16_step_groups(self):
+        pattern = bytearray(32 + 17 * 48)
+        pattern[20] = 17
+        for step in (0, 16):
+            offset = 32 + step * 48
+            pattern[offset + 4] = 1 << 3
+            pattern[offset + 47] = 1
+
         self.assertEqual(
-            sq64.render_melody_steps(pattern),
-            ["■               ", " ■  "],
+            [len(chunk) for chunk in sq64.render_melody_steps(pattern)[0].split("|")],
+            [16, 1],
         )
 
     def test_render_rhythm_steps_uses_selected_subtrack(self):

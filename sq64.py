@@ -733,7 +733,7 @@ def decode_name(data: Sequence[int]) -> str:
 
 
 def render_melody_steps(pattern: ByteData) -> List[str]:
-    """Render melodic notes and rests as rows of step symbols."""
+    """Render all melodic steps as one row with 16-step separators."""
     symbols = []
 
     for step_number in range(pattern[20]):
@@ -746,8 +746,10 @@ def render_melody_steps(pattern: ByteData) -> List[str]:
         symbols.append("■" if step_enabled and has_note else " ")
 
     return [
-        "".join(symbols[start:start + 16])
-        for start in range(0, len(symbols), 16)
+        "|".join(
+            "".join(symbols[start:start + 16])
+            for start in range(0, len(symbols), 16)
+        )
     ]
 
 
@@ -755,7 +757,7 @@ def render_rhythm_steps(
     pattern: ByteData,
     subtrack_number: int,
 ) -> List[str]:
-    """Render one drum sub-track as rows of trigger symbols."""
+    """Render one drum sub-track with 16-step separators."""
     symbols = []
     subtrack_offset = 32 + subtrack_number * 384
 
@@ -765,8 +767,10 @@ def render_rhythm_steps(
         symbols.append("■" if trigger_enabled else " ")
 
     return [
-        "".join(symbols[start:start + 16])
-        for start in range(0, len(symbols), 16)
+        "|".join(
+            "".join(symbols[start:start + 16])
+            for start in range(0, len(symbols), 16)
+        )
     ]
 
 
@@ -824,7 +828,7 @@ def print_project_dump(
         )
 
         for row in render_melody_steps(pattern):
-            print(f"      |{row:<16}|")
+            print(f"      |{row}|")
 
     for number, pattern in filtered_rhythms:
         name = decode_name(pattern) or "(unnamed)"
@@ -845,7 +849,7 @@ def print_project_dump(
                     if row_number == 0
                     else "   "
                 )
-                print(f"      {label} |{row:<16}|")
+                print(f"      {label} |{row}|")
 
 
 # ------------------------------------------------------------
