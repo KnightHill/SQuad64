@@ -101,6 +101,14 @@ class SQ64Client:
             global_channel=self.global_channel,
         )
 
+    def read_global_data(self) -> bytearray:
+        """Read this SQ-64's global settings."""
+        return sq64.read_global_data(
+            self.inport,
+            self.outport,
+            global_channel=self.global_channel,
+        )
+
     def send_pattern(
         self,
         project: sq64.ByteData,
