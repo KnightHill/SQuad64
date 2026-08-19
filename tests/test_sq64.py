@@ -469,6 +469,12 @@ class PatternTests(unittest.TestCase):
 
         self.assertEqual(sq64.decode_name(data), "A PATTERN")
 
+    def test_decode_name_strips_trailing_nulls(self):
+        data = bytearray(20)
+        data[4:20] = b"A PATTERN".ljust(16, b"\0")
+
+        self.assertEqual(sq64.decode_name(data), "A PATTERN")
+
     def test_render_melody_steps_marks_enabled_note_events(self):
         pattern = bytearray(32 + 20 * 48)
         pattern[20] = 20
@@ -639,6 +645,9 @@ class SendTests(unittest.TestCase):
         self.assertEqual(outport.sent[1].data[6], 0x00)
         self.assertEqual(outport.sent[2].data[6], 0x12)
         self.assertEqual(outport.sent[3].data[6], 0x03)
+        sent_project = sq64.unpack_7bit(outport.sent[0].data[6:], 512)
+        self.assertEqual(sent_project[40] & 1, 1)
+        self.assertEqual(project[40] & 1, 0)
         self.assertEqual(
             [args.args[1] for args in wait_for_ack.call_args_list],
             [
