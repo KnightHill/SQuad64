@@ -39,7 +39,7 @@ class DumpArgumentTests(unittest.TestCase):
                     dump.parse_args()
 
         self.assertEqual(exit_result.exception.code, 0)
-        self.assertEqual(output.getvalue(), "squad64-dump 0.2.3\n")
+        self.assertEqual(output.getvalue(), "squad64-dump 0.2.4\n")
 
 
 class EditArgumentTests(unittest.TestCase):
@@ -97,7 +97,7 @@ class EditArgumentTests(unittest.TestCase):
                     edit.parse_args()
 
         self.assertEqual(exit_result.exception.code, 0)
-        self.assertEqual(output.getvalue(), "squad64-edit 0.2.3\n")
+        self.assertEqual(output.getvalue(), "squad64-edit 0.2.4\n")
 
 
 if __name__ == "__main__":

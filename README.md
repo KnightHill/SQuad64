@@ -89,6 +89,21 @@ The editor accepts tracks `A` through `C` and pattern numbers `1` through
 `16`. Use `--verbose` with either application to list available MIDI ports
 while connecting.
 
+## Pattern files
+
+[`file_io.py`](file_io.py) provides `load_file(filename)` and
+`save_file(filename, notes)` for editable `.pat` pattern files. A pattern must
+contain between 4 and 64 entries. Notes are MIDI numbers from `0` through
+`127`; a rest can be written as `None`, `rest`, or `-`. Entries may be
+separated by spaces or commas, and `#` starts a comment.
+
+For example:
+
+```text
+48, None, 52, None
+55, rest, 60, -
+```
+
 ## MIDI configuration
 
 The SQ-64 global MIDI channel is currently set by `GLOBAL_CHANNEL` in
