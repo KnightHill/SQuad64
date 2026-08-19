@@ -63,7 +63,7 @@ class ArgumentTests(unittest.TestCase):
                     main.parse_args()
 
         self.assertEqual(exit_result.exception.code, 0)
-        self.assertEqual(output.getvalue(), "squad64 0.2.2\n")
+        self.assertEqual(output.getvalue(), "squad64 0.2.3\n")
 
     def test_pattern_must_be_between_one_and_sixteen(self):
         for value in ("0", "17", "not-a-number"):

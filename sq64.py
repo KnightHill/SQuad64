@@ -783,6 +783,8 @@ def render_melody_steps(
 def render_rhythm_steps(
     pattern: ByteData,
     subtrack_number: int,
+    *,
+    color: bool = False,
 ) -> List[str]:
     """Render one drum sub-track with 16-step separators."""
     symbols = []
@@ -791,7 +793,14 @@ def render_rhythm_steps(
     for step_number in range(pattern[20]):
         step_offset = subtrack_offset + step_number * 6
         trigger_enabled = bool(pattern[step_offset + 3] & (1 << 7))
-        symbols.append("■" if trigger_enabled else " ")
+        if trigger_enabled:
+            symbol = "■"
+            symbols.append(
+                _colorize_velocity(symbol, pattern[step_offset])
+                if color else symbol
+            )
+        else:
+            symbols.append(" ")
 
     return [
         "|".join(
@@ -867,7 +876,11 @@ def print_project_dump(
         )
 
         for subtrack_number in range(16):
-            rows = render_rhythm_steps(pattern, subtrack_number)
+            rows = render_rhythm_steps(
+                pattern,
+                subtrack_number,
+                color=use_color,
+            )
 
             if not any("■" in row for row in rows):
                 continue

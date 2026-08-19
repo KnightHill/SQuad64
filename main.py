@@ -9,7 +9,7 @@ import sq64
 from sq64_client import SQ64Client
 
 
-__version__ = "0.2.2"
+__version__ = "0.2.3"
 
 TEST_PATTERN_NOTES = [
     48, None,

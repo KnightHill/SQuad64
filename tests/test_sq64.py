@@ -617,6 +617,28 @@ class PatternTests(unittest.TestCase):
         self.assertEqual(sq64.render_rhythm_steps(pattern, 0), ["    "])
         self.assertEqual(sq64.render_rhythm_steps(pattern, 1), ["  ■ "])
 
+    def test_render_rhythm_steps_colors_triggers_by_velocity(self):
+        pattern = bytearray(32 + 2 * 384)
+        pattern[20] = 2
+
+        low_velocity_offset = 32
+        high_velocity_offset = 32 + 6
+        for offset, velocity in (
+            (low_velocity_offset, 0),
+            (high_velocity_offset, 255),
+        ):
+            pattern[offset] = velocity
+            pattern[offset + 3] = 1 << 7
+
+        rendered = sq64.render_rhythm_steps(
+            pattern,
+            0,
+            color=True,
+        )[0]
+
+        self.assertIn("\033[38;5;23m■\033[0m", rendered)
+        self.assertIn("\033[38;5;51m■\033[0m", rendered)
+
     def test_print_project_dump_filters_by_track(self):
         output = io.StringIO()
 
