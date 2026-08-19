@@ -1,8 +1,48 @@
 import time
+from typing import (
+    Callable,
+    Dict,
+    Iterable,
+    List,
+    Mapping,
+    Optional,
+    Protocol,
+    Sequence,
+    Tuple,
+)
 
 import mido
 
 from progress import PatternDumpIndicator
+
+
+class MidiMessage(Protocol):
+    """Message attributes used by the SQ-64 protocol helpers."""
+
+    type: str
+    data: Sequence[int]
+
+
+class InputPort(Protocol):
+    """Minimal interface required from a MIDI input port."""
+
+    def poll(self) -> Optional[MidiMessage]: ...
+
+
+class OutputPort(Protocol):
+    """Minimal interface required from a MIDI output port."""
+
+    def send(self, message: MidiMessage) -> None: ...
+
+
+ByteData = Sequence[int]
+MelodyKey = Tuple[int, int]
+MelodyPatternMap = Mapping[MelodyKey, ByteData]
+RhythmPatternMap = Mapping[int, ByteData]
+MelodyPatterns = Dict[MelodyKey, bytearray]
+RhythmPatterns = Dict[int, bytearray]
+ProjectDump = Tuple[bytearray, MelodyPatterns, RhythmPatterns]
+ProgressCallback = Callable[[], None]
 
 
 # ------------------------------------------------------------
@@ -44,7 +84,7 @@ SQ64_MEMBER_ID = [0x00, 0x00]
 # MIDI ports
 # ------------------------------------------------------------
 
-def find_sq64_ports():
+def find_sq64_ports() -> Tuple[str, str]:
     """Find the ALSA MIDI endpoints used for SQ-64 SysEx transfers."""
     inputs = [p for p in mido.get_input_names() if "SQ-64" in p.upper()]
     outputs = [p for p in mido.get_output_names() if "SQ-64" in p.upper()]
@@ -81,7 +121,11 @@ def find_sq64_ports():
     return input_name, sequence_outputs[0]
 
 
-def get_firmware_version(inport, outport, timeout=5.0):
+def get_firmware_version(
+    inport: InputPort,
+    outport: OutputPort,
+    timeout: float = 5.0,
+) -> str:
     """Request and return the connected SQ-64 firmware version."""
     outport.send(mido.Message("sysex", data=DEVICE_INQUIRY_REQUEST))
     deadline = time.monotonic() + timeout
@@ -127,7 +171,11 @@ def get_firmware_version(inport, outport, timeout=5.0):
 # Korg SysEx
 # ------------------------------------------------------------
 
-def sq64_sysex(function, extra=(), global_channel=None):
+def sq64_sysex(
+    function: int,
+    extra: ByteData = (),
+    global_channel: Optional[int] = None,
+) -> MidiMessage:
     """Build an SQ-64 Korg SysEx message."""
     if global_channel is None:
         global_channel = GLOBAL_CHANNEL
@@ -146,7 +194,10 @@ def sq64_sysex(function, extra=(), global_channel=None):
     )
 
 
-def get_function(msg, global_channel=None):
+def get_function(
+    msg: MidiMessage,
+    global_channel: Optional[int] = None,
+) -> Optional[int]:
     """Return the function ID from a valid SQ-64 SysEx message."""
     if global_channel is None:
         global_channel = GLOBAL_CHANNEL
@@ -171,8 +222,14 @@ def get_function(msg, global_channel=None):
     return d[5]
 
 
-def wait_for_function(port, wanted, timeout=5.0, *, global_channel=None,
-                      progress=None):
+def wait_for_function(
+    port: InputPort,
+    wanted: int,
+    timeout: float = 5.0,
+    *,
+    global_channel: Optional[int] = None,
+    progress: Optional[ProgressCallback] = None,
+) -> MidiMessage:
     """Wait for an SQ-64 SysEx function or raise on timeout or NAK."""
     deadline = time.monotonic() + timeout
 
@@ -209,8 +266,13 @@ def wait_for_function(port, wanted, timeout=5.0, *, global_channel=None,
     )
 
 
-def wait_for_ack(port, context="data transfer", timeout=10.0, *,
-                 global_channel=None):
+def wait_for_ack(
+    port: InputPort,
+    context: str = "data transfer",
+    timeout: float = 10.0,
+    *,
+    global_channel: Optional[int] = None,
+) -> None:
     """Wait for an SQ-64 acknowledgement with transfer context."""
     try:
         wait_for_function(
@@ -229,7 +291,7 @@ def wait_for_ack(port, context="data transfer", timeout=10.0, *,
 # Korg 8-bit -> MIDI 7-bit conversion
 # ------------------------------------------------------------
 
-def pack_7bit(data):
+def pack_7bit(data: ByteData) -> List[int]:
     """
     Convert arbitrary 8-bit SQ-64 data into Korg's MIDI-safe
     7-bit representation.
@@ -256,9 +318,9 @@ def pack_7bit(data):
     return result
 
 
-def unpack_7bit(data, expected_size):
+def unpack_7bit(data: ByteData, expected_size: int) -> bytearray:
     """Decode Korg MIDI-safe 7-bit data into its original bytes."""
-    result = []
+    result: List[int] = []
 
     i = 0
 
@@ -288,10 +350,19 @@ def unpack_7bit(data, expected_size):
 # Read current SQ-64 project header
 # ------------------------------------------------------------
 
-def read_pattern_dump(inport, outport, request_func, dump_func,
-                      selector, packed_size, unpacked_size,
-                      expected_signature, *, global_channel=None,
-                      progress=None):
+def read_pattern_dump(
+    inport: InputPort,
+    outport: OutputPort,
+    request_func: int,
+    dump_func: int,
+    selector: int,
+    packed_size: int,
+    unpacked_size: int,
+    expected_signature: bytes,
+    *,
+    global_channel: Optional[int] = None,
+    progress: Optional[ProgressCallback] = None,
+) -> bytearray:
     """Request, validate, and unpack one SQ-64 pattern."""
     outport.send(sq64_sysex(request_func, [selector], global_channel))
     msg = wait_for_function(
@@ -333,7 +404,12 @@ def read_pattern_dump(inport, outport, request_func, dump_func,
     return pattern
 
 
-def read_current_project(inport, outport, *, global_channel=None):
+def read_current_project(
+    inport: InputPort,
+    outport: OutputPort,
+    *,
+    global_channel: Optional[int] = None,
+) -> ProjectDump:
     """Read the current project and all patterns marked as present."""
     # Request current project.
     outport.send(
@@ -343,7 +419,7 @@ def read_current_project(inport, outport, *, global_channel=None):
         )
     )
 
-    def finalize_transaction():
+    def finalize_transaction() -> None:
         """Leave the SQ-64 project-read transaction."""
         outport.send(sq64_sysex(
             FUNC_FINALIZE,
@@ -451,12 +527,12 @@ def read_current_project(inport, outport, *, global_channel=None):
     return project, melody_patterns, rhythm_patterns
 
 
-def decode_name(data):
+def decode_name(data: Sequence[int]) -> str:
     """Decode a fixed-width SQ-64 name field."""
-    return bytes(data[4:20]).decode("ascii", errors="replace").rstrip()
+    return bytes(data[4:20]).decode("ascii", errors="replace").rstrip(" \0")
 
 
-def render_melody_steps(pattern):
+def render_melody_steps(pattern: ByteData) -> List[str]:
     """Render melodic notes and rests as rows of step symbols."""
     symbols = []
 
@@ -475,7 +551,10 @@ def render_melody_steps(pattern):
     ]
 
 
-def render_rhythm_steps(pattern, subtrack_number):
+def render_rhythm_steps(
+    pattern: ByteData,
+    subtrack_number: int,
+) -> List[str]:
     """Render one drum sub-track as rows of trigger symbols."""
     symbols = []
     subtrack_offset = 32 + subtrack_number * 384
@@ -491,8 +570,14 @@ def render_rhythm_steps(pattern, subtrack_number):
     ]
 
 
-def print_project_dump(project, melody_patterns, rhythm_patterns, *,
-                       track=None, pattern_number=None):
+def print_project_dump(
+    project: ByteData,
+    melody_patterns: MelodyPatternMap,
+    rhythm_patterns: RhythmPatternMap,
+    *,
+    track: Optional[str] = None,
+    pattern_number: Optional[int] = None,
+) -> None:
     """Print a concise summary of a dumped SQ-64 project."""
     if track is not None:
         track = track.upper()
@@ -567,7 +652,7 @@ def print_project_dump(project, melody_patterns, rhythm_patterns, *,
 # Build one melodic pattern
 # ------------------------------------------------------------
 
-def build_reference_structure():
+def build_reference_structure() -> bytearray:
     """Reproduce the initialized melodic structure captured from the SQ-64."""
     data = bytearray(3104)
     data[0:4] = b"PATT"
@@ -597,7 +682,7 @@ def build_reference_structure():
     return data
 
 
-def build_pattern(notes):
+def build_pattern(notes: Iterable[Optional[int]]) -> bytearray:
     """Build a melodic pattern from MIDI note numbers and rests."""
     notes = list(notes)
 
@@ -676,14 +761,27 @@ def build_pattern(notes):
 # Send project + pattern
 # ------------------------------------------------------------
 
-def send_pattern(inport, outport, project, pattern,
-                 melody_patterns, rhythm_patterns, *, global_channel=None):
+def send_pattern(
+    inport: InputPort,
+    outport: OutputPort,
+    project: ByteData,
+    pattern: ByteData,
+    melody_patterns: MelodyPatternMap,
+    rhythm_patterns: RhythmPatternMap,
+    *,
+    global_channel: Optional[int] = None,
+) -> None:
     """Replace A1 while retransmitting all preserved project patterns."""
     # Validate and pack everything before putting the SQ-64 into receiving
     # project mode.
-    project_packed = pack_7bit(project)
+    if len(project) != 512:
+        raise RuntimeError("Invalid project size")
 
-    if len(project) != 512 or len(project_packed) != 586:
+    updated_project = bytearray(project)
+    updated_project[40] |= 1  # Track A, Pattern 1 is included below.
+    project_packed = pack_7bit(updated_project)
+
+    if len(project_packed) != 586:
         raise RuntimeError("Invalid project size")
 
     prepared_melodies = []
