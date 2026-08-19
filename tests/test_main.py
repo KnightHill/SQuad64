@@ -12,7 +12,7 @@ class ArgumentTests(unittest.TestCase):
         with patch.object(
             sys,
             "argv",
-            ["main.py", "--track", "b", "--pattern", "3"],
+            ["main.py", "-t", "b", "-p", "3"],
         ):
             args = main.parse_args()
 
@@ -20,6 +20,7 @@ class ArgumentTests(unittest.TestCase):
         self.assertEqual(args.pattern, 3)
         self.assertFalse(args.update)
         self.assertFalse(args.show_global)
+        self.assertFalse(args.verbose)
 
     def test_filters_are_optional(self):
         with patch.object(sys, "argv", ["main.py"]):
@@ -27,6 +28,12 @@ class ArgumentTests(unittest.TestCase):
 
         self.assertIsNone(args.track)
         self.assertIsNone(args.pattern)
+
+    def test_verbose_option(self):
+        with patch.object(sys, "argv", ["main.py", "--verbose"]):
+            args = main.parse_args()
+
+        self.assertTrue(args.verbose)
 
     def test_global_option_has_short_and_long_forms(self):
         for option in ("-g", "--global"):
@@ -56,7 +63,7 @@ class ArgumentTests(unittest.TestCase):
                     main.parse_args()
 
         self.assertEqual(exit_result.exception.code, 0)
-        self.assertEqual(output.getvalue(), "squad64 0.2.1\n")
+        self.assertEqual(output.getvalue(), "squad64 0.2.2\n")
 
     def test_pattern_must_be_between_one_and_sixteen(self):
         for value in ("0", "17", "not-a-number"):
@@ -76,6 +83,7 @@ class ErrorHandlingTests(unittest.TestCase):
         self.args = main.argparse.Namespace(
             update=False,
             show_global=False,
+            verbose=False,
             track=None,
             pattern=None,
         )
@@ -95,6 +103,7 @@ class ErrorHandlingTests(unittest.TestCase):
             status = main.main()
 
         self.assertEqual(status, 1)
+        find_ports.assert_called_once_with(verbose=False)
         self.assertEqual(
             errors.getvalue(),
             "Error: No SQ-64 MIDI input port found\n",
@@ -163,6 +172,7 @@ class RunTests(unittest.TestCase):
         args = main.argparse.Namespace(
             update=False,
             show_global=True,
+            verbose=False,
             track=None,
             pattern=None,
         )

@@ -127,9 +127,9 @@ Tracks are `A` through `D`, and pattern numbers are `1` through `16`. These
 options filter only the printed dump; the complete project is still downloaded
 so update mode can preserve patterns that are not displayed.
 
-The program lists the available MIDI ports. On the SQ-64 ALSA USB interface it
-prefers `MIDI OUT 2` for device responses and the `SEQ` endpoint for data sent
-to the sequencer. It then:
+Use `--verbose` to list the available MIDI ports while connecting. On the
+SQ-64 ALSA USB interface the program prefers `MIDI OUT 2` for device responses
+and the `SEQ` endpoint for data sent to the sequencer. It then:
 
 1. Downloads the current project header.
 2. Downloads all patterns marked as present in the project.

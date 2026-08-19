@@ -86,18 +86,19 @@ SQ64_MEMBER_ID = [0x00, 0x00]
 # MIDI ports
 # ------------------------------------------------------------
 
-def find_sq64_ports() -> Tuple[str, str]:
+def find_sq64_ports(*, verbose: bool = False) -> Tuple[str, str]:
     """Find the ALSA MIDI endpoints used for SQ-64 SysEx transfers."""
     inputs = [p for p in mido.get_input_names() if "SQ-64" in p.upper()]
     outputs = [p for p in mido.get_output_names() if "SQ-64" in p.upper()]
 
-    print("Inputs:")
-    for p in mido.get_input_names():
-        print(" ", p)
+    if verbose:
+        print("Inputs:")
+        for p in mido.get_input_names():
+            print(" ", p)
 
-    print("\nOutputs:")
-    for p in mido.get_output_names():
-        print(" ", p)
+        print("\nOutputs:")
+        for p in mido.get_output_names():
+            print(" ", p)
 
     if not inputs:
         raise RuntimeError("No SQ-64 MIDI input port found")
