@@ -1,5 +1,8 @@
 import time
+
 import mido
+
+from progress import PatternDumpIndicator
 
 
 # ------------------------------------------------------------
@@ -27,6 +30,14 @@ FUNC_NO_DATA     = 0x30
 # SQ-64 Global MIDI channel.
 # Channel 1 = 0 here, channel 16 = 15.
 GLOBAL_CHANNEL = 0
+
+
+# MIDI Universal Device Inquiry. The all-call device ID lets the SQ-64 reply
+# even when its configured global channel is not known yet.
+DEVICE_INQUIRY_REQUEST = [0x7E, 0x7F, 0x06, 0x01]
+DEVICE_INQUIRY_REPLY = [0x06, 0x02]
+SQ64_FAMILY_ID = [0x60, 0x01]
+SQ64_MEMBER_ID = [0x00, 0x00]
 
 
 # ------------------------------------------------------------
@@ -70,13 +81,58 @@ def find_sq64_ports():
     return input_name, sequence_outputs[0]
 
 
+def get_firmware_version(inport, outport, timeout=5.0):
+    """Request and return the connected SQ-64 firmware version."""
+    outport.send(mido.Message("sysex", data=DEVICE_INQUIRY_REQUEST))
+    deadline = time.monotonic() + timeout
+
+    while time.monotonic() < deadline:
+        msg = inport.poll()
+
+        if msg is None:
+            time.sleep(0.001)
+            continue
+
+        if msg.type != "sysex":
+            continue
+
+        data = list(msg.data)
+
+        if (
+            len(data) < 4
+            or data[0] != 0x7E
+            or data[2:4] != DEVICE_INQUIRY_REPLY
+        ):
+            continue
+
+        identity = [KORG_ID, *SQ64_FAMILY_ID, *SQ64_MEMBER_ID]
+
+        if len(data) >= 9 and data[4:9] != identity:
+            continue
+
+        if len(data) != 13:
+            raise RuntimeError(
+                f"Invalid SQ-64 device inquiry reply length {len(data)}"
+            )
+
+        minor = data[9] | data[10] << 7
+        major = data[11] | data[12] << 7
+
+        return f"{major}.{minor:02d}"
+
+    raise TimeoutError("Timed out waiting for SQ-64 firmware version")
+
+
 # ------------------------------------------------------------
 # Korg SysEx
 # ------------------------------------------------------------
 
-def sq64_sysex(function, extra=()):
+def sq64_sysex(function, extra=(), global_channel=None):
     """Build an SQ-64 Korg SysEx message."""
-    device_id = 0x30 + GLOBAL_CHANNEL
+    if global_channel is None:
+        global_channel = GLOBAL_CHANNEL
+
+    device_id = 0x30 + global_channel
 
     return mido.Message(
         "sysex",
@@ -90,8 +146,11 @@ def sq64_sysex(function, extra=()):
     )
 
 
-def get_function(msg):
+def get_function(msg, global_channel=None):
     """Return the function ID from a valid SQ-64 SysEx message."""
+    if global_channel is None:
+        global_channel = GLOBAL_CHANNEL
+
     if msg.type != "sysex":
         return None
 
@@ -102,7 +161,7 @@ def get_function(msg):
 
     expected = [
         KORG_ID,
-        0x30 + GLOBAL_CHANNEL,
+        0x30 + global_channel,
         *SQ64_ID,
     ]
 
@@ -112,18 +171,22 @@ def get_function(msg):
     return d[5]
 
 
-def wait_for_function(port, wanted, timeout=5.0):
+def wait_for_function(port, wanted, timeout=5.0, *, global_channel=None,
+                      progress=None):
     """Wait for an SQ-64 SysEx function or raise on timeout or NAK."""
     deadline = time.monotonic() + timeout
 
     while time.monotonic() < deadline:
+        if progress is not None:
+            progress()
+
         msg = port.poll()
 
         if msg is None:
             time.sleep(0.001)
             continue
 
-        func = get_function(msg)
+        func = get_function(msg, global_channel)
 
         if func is None:
             continue
@@ -146,10 +209,16 @@ def wait_for_function(port, wanted, timeout=5.0):
     )
 
 
-def wait_for_ack(port, context="data transfer", timeout=10.0):
+def wait_for_ack(port, context="data transfer", timeout=10.0, *,
+                 global_channel=None):
     """Wait for an SQ-64 acknowledgement with transfer context."""
     try:
-        wait_for_function(port, FUNC_ACK, timeout)
+        wait_for_function(
+            port,
+            FUNC_ACK,
+            timeout,
+            global_channel=global_channel,
+        )
     except TimeoutError as error:
         raise TimeoutError(
             f"Timed out waiting for SQ-64 ACK after {context}"
@@ -221,10 +290,16 @@ def unpack_7bit(data, expected_size):
 
 def read_pattern_dump(inport, outport, request_func, dump_func,
                       selector, packed_size, unpacked_size,
-                      expected_signature):
+                      expected_signature, *, global_channel=None,
+                      progress=None):
     """Request, validate, and unpack one SQ-64 pattern."""
-    outport.send(sq64_sysex(request_func, [selector]))
-    msg = wait_for_function(inport, dump_func)
+    outport.send(sq64_sysex(request_func, [selector], global_channel))
+    msg = wait_for_function(
+        inport,
+        dump_func,
+        global_channel=global_channel,
+        progress=progress,
+    )
 
     response = list(msg.data)[6:]
 
@@ -258,19 +333,25 @@ def read_pattern_dump(inport, outport, request_func, dump_func,
     return pattern
 
 
-def read_current_project(inport, outport):
+def read_current_project(inport, outport, *, global_channel=None):
     """Read the current project and all patterns marked as present."""
     # Request current project.
     outport.send(
-        sq64_sysex(FUNC_CURRENT_PROJECT_REQUEST)
+        sq64_sysex(
+            FUNC_CURRENT_PROJECT_REQUEST,
+            global_channel=global_channel,
+        )
     )
 
     def finalize_transaction():
         """Leave the SQ-64 project-read transaction."""
-        outport.send(sq64_sysex(FUNC_FINALIZE))
+        outport.send(sq64_sysex(
+            FUNC_FINALIZE,
+            global_channel=global_channel,
+        ))
 
         try:
-            wait_for_ack(inport)
+            wait_for_ack(inport, global_channel=global_channel)
         except TimeoutError:
             # Some SQ-64 v2.x units leave transmitting-project mode without
             # returning the documented ACK. The finalize message was still
@@ -279,10 +360,13 @@ def read_current_project(inport, outport):
                 "Warning: SQ-64 did not acknowledge project-read finalize"
             )
 
+    indicator = PatternDumpIndicator()
+
     try:
         msg = wait_for_function(
             inport,
-            FUNC_CURRENT_PROJECT_DUMP
+            FUNC_CURRENT_PROJECT_DUMP,
+            global_channel=global_channel,
         )
 
         packed = list(msg.data)[6:]
@@ -308,9 +392,9 @@ def read_current_project(inport, outport):
                     continue
 
                 selector = (track << 4) | pattern_number
-                print(
-                    f"  Dumping Track {chr(ord('A') + track)} / "
-                    f"Pattern {pattern_number + 1}..."
+                indicator.start(
+                    f"Track {chr(ord('A') + track)} / "
+                    f"Pattern {pattern_number + 1}"
                 )
                 melody_patterns[(track, pattern_number)] = read_pattern_dump(
                     inport,
@@ -321,7 +405,10 @@ def read_current_project(inport, outport):
                     3548,
                     3104,
                     b"PATT",
+                    global_channel=global_channel,
+                    progress=indicator.update,
                 )
+                indicator.complete()
 
         rhythm_patterns = {}
 
@@ -332,7 +419,7 @@ def read_current_project(inport, outport):
             if not project[presence_offset] & (1 << presence_bit):
                 continue
 
-            print(f"  Dumping Track D / Pattern {pattern_number + 1}...")
+            indicator.start(f"Track D / Pattern {pattern_number + 1}")
             rhythm_patterns[pattern_number] = read_pattern_dump(
                 inport,
                 outport,
@@ -342,8 +429,12 @@ def read_current_project(inport, outport):
                 7059,
                 6176,
                 b"PATR",
+                global_channel=global_channel,
+                progress=indicator.update,
             )
+            indicator.complete()
     except BaseException:
+        indicator.finish(success=False)
         # Preserve the original read/validation failure if cleanup also fails.
         try:
             finalize_transaction()
@@ -354,6 +445,7 @@ def read_current_project(inport, outport):
             )
         raise
     else:
+        indicator.finish()
         finalize_transaction()
 
     return project, melody_patterns, rhythm_patterns
@@ -399,8 +491,31 @@ def render_rhythm_steps(pattern, subtrack_number):
     ]
 
 
-def print_project_dump(project, melody_patterns, rhythm_patterns):
+def print_project_dump(project, melody_patterns, rhythm_patterns, *,
+                       track=None, pattern_number=None):
     """Print a concise summary of a dumped SQ-64 project."""
+    if track is not None:
+        track = track.upper()
+
+    filtered_melodies = [
+        ((track_index, number), pattern)
+        for (track_index, number), pattern in sorted(
+            melody_patterns.items()
+        )
+        if (
+            track in (None, chr(ord("A") + track_index))
+            and pattern_number in (None, number + 1)
+        )
+    ]
+    filtered_rhythms = [
+        (number, pattern)
+        for number, pattern in sorted(rhythm_patterns.items())
+        if (
+            track in (None, "D")
+            and pattern_number in (None, number + 1)
+        )
+    ]
+
     project_name = decode_name(project)
     tempo = (project[20] | project[21] << 8) / 10
 
@@ -409,29 +524,27 @@ def print_project_dump(project, melody_patterns, rhythm_patterns):
     print(f"  Tempo  : {tempo:.1f} BPM")
     print("  Header : 512 bytes")
 
-    if not melody_patterns and not rhythm_patterns:
+    if not filtered_melodies and not filtered_rhythms:
         print("  Patterns: none")
         return
 
     print("  Patterns:")
 
-    for (track, pattern_number), pattern in sorted(
-        melody_patterns.items()
-    ):
+    for (track_index, number), pattern in filtered_melodies:
         name = decode_name(pattern) or "(unnamed)"
         print(
-            f"    Track {chr(ord('A') + track)} / "
-            f"Pattern {pattern_number + 1}: {name}, "
+            f"    Track {chr(ord('A') + track_index)} / "
+            f"Pattern {number + 1}: {name}, "
             f"{pattern[20]} steps, {len(pattern)} bytes"
         )
 
         for row in render_melody_steps(pattern):
             print(f"      |{row:<16}|")
 
-    for pattern_number, pattern in sorted(rhythm_patterns.items()):
+    for number, pattern in filtered_rhythms:
         name = decode_name(pattern) or "(unnamed)"
         print(
-            f"    Track D / Pattern {pattern_number + 1}: {name}, "
+            f"    Track D / Pattern {number + 1}: {name}, "
             f"{pattern[20]} steps, {len(pattern)} bytes"
         )
 
@@ -484,8 +597,23 @@ def build_reference_structure():
     return data
 
 
-def build_pattern():
-    """Build the local 16-step monophonic C-major test pattern."""
+def build_pattern(notes):
+    """Build a melodic pattern from MIDI note numbers and rests."""
+    notes = list(notes)
+
+    if not 1 <= len(notes) <= 64:
+        raise ValueError("Pattern must contain between 1 and 64 steps")
+
+    for note in notes:
+        if note is not None and (
+            not isinstance(note, int)
+            or not 0 <= note <= 127
+        ):
+            raise ValueError(
+                "Pattern notes must be MIDI note numbers from 0 to 127 "
+                "or None"
+            )
+
     # Start with the replicated SQ-64 structure, then overlay the sequence
     # generated entirely on the laptop.
     data = build_reference_structure()
@@ -493,11 +621,11 @@ def build_pattern():
     # Pattern header
     data[0:4] = b"PATT"
 
-    name = b"PYTHON TEST"
+    name = b"SQUAD64 TEST"
     data[4:20] = name.ljust(16, b" ")
 
     # Pattern length
-    data[20] = 16
+    data[20] = len(notes)
 
     # Scale type = Equal
     data[21] = 0
@@ -512,24 +640,8 @@ def build_pattern():
     # this firmware stores the selected 1/16 timing as 0x10 at
     # byte 28 rather than the 0x20 implied by Korg's published bit table.
     #
-    # Our simple sequence:
-    #
-    # C3  -  E3  -  G3  -  E3  -
-    # C4  -  G3  -  E3  -  D3  -
-    #
     # MIDI convention:
     # C3 = 48
-
-    notes = [
-        48, None,
-        52, None,
-        55, None,
-        52, None,
-        60, None,
-        55, None,
-        52, None,
-        50, None,
-    ]
 
     for step_number, note in enumerate(notes):
         step_offset = 32 + step_number * 48
@@ -565,7 +677,7 @@ def build_pattern():
 # ------------------------------------------------------------
 
 def send_pattern(inport, outport, project, pattern,
-                 melody_patterns, rhythm_patterns):
+                 melody_patterns, rhythm_patterns, *, global_channel=None):
     """Replace A1 while retransmitting all preserved project patterns."""
     # Validate and pack everything before putting the SQ-64 into receiving
     # project mode.
@@ -608,30 +720,45 @@ def send_pattern(inport, outport, project, pattern,
         outport.send(
             sq64_sysex(
                 FUNC_CURRENT_PROJECT_DUMP,
-                project_packed
+                project_packed,
+                global_channel,
             )
         )
-        wait_for_ack(inport, "current project header")
+        wait_for_ack(
+            inport,
+            "current project header",
+            global_channel=global_channel,
+        )
 
         for label, selector, pattern_packed in prepared_melodies:
             print(f"  Sending {label}...")
             outport.send(
                 sq64_sysex(
                     FUNC_MELODY_PATTERN_DUMP,
-                    [selector, *pattern_packed]
+                    [selector, *pattern_packed],
+                    global_channel,
                 )
             )
-            wait_for_ack(inport, label)
+            wait_for_ack(
+                inport,
+                label,
+                global_channel=global_channel,
+            )
 
         for label, pattern_number, pattern_packed in prepared_rhythms:
             print(f"  Sending {label}...")
             outport.send(
                 sq64_sysex(
                     FUNC_RHYTHM_PATTERN_DUMP,
-                    [pattern_number, *pattern_packed]
+                    [pattern_number, *pattern_packed],
+                    global_channel,
                 )
             )
-            wait_for_ack(inport, label)
+            wait_for_ack(
+                inport,
+                label,
+                global_channel=global_channel,
+            )
     except BaseException as error:
         transfer_error = error
         raise
@@ -641,8 +768,15 @@ def send_pattern(inport, outport, project, pattern,
         # the SQ-64 in receiving-project mode.
         try:
             print("  Finalizing project transfer...")
-            outport.send(sq64_sysex(FUNC_FINALIZE))
-            wait_for_ack(inport, "project finalize")
+            outport.send(sq64_sysex(
+                FUNC_FINALIZE,
+                global_channel=global_channel,
+            ))
+            wait_for_ack(
+                inport,
+                "project finalize",
+                global_channel=global_channel,
+            )
         except Exception as cleanup_error:
             if transfer_error is None:
                 raise

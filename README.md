@@ -1,7 +1,8 @@
-# Korg SQ-64 Pattern Sender
+# SQuad64
 
-This small Python utility generates a 16-step monophonic C-major test pattern
-and writes it to **Track A, Pattern 1** on a connected Korg SQ-64.
+SQuad64 is a pattern and project utility for the Korg SQ-64. It can inspect the
+current project and generate a 16-step monophonic C-major test pattern for
+**Track A, Pattern 1**.
 
 ## Disclaimer
 
@@ -48,7 +49,7 @@ edit buffer in internal memory. Back up important projects before doing so.
 
 ## Generated pattern
 
-The pattern is named `PYTHON TEST`, uses 16 steps, and is configured for equal
+The pattern is named `SQUAD64 TEST`, uses 16 steps, and is configured for equal
 temperament with C as its root in MONO mode.
 
 ```text
@@ -60,6 +61,10 @@ Velocity, gate, timing, and other event parameters reproduce the reference
 Track A, Pattern 1 structure captured from the SQ-64. The pattern is generated
 locally and does not clone an existing pattern at runtime. MIDI note numbers
 are used, with C3 represented as note 48.
+
+The sequence is defined by `TEST_PATTERN_NOTES` in [`main.py`](main.py) and is
+passed to `build_pattern(notes)`. Use `None` for a rest and MIDI note numbers
+from `0` through `127` for played steps.
 
 ## Requirements
 
@@ -74,6 +79,7 @@ Install the Python dependencies in a virtual environment:
 ```bash
 python3 -m venv .venv
 .venv/bin/pip install mido python-rtmidi
+. .venv/bin/activate
 ```
 
 ## Usage
@@ -81,14 +87,14 @@ python3 -m venv .venv
 Connect and power on the SQ-64, then run:
 
 ```bash
-.venv/bin/python main.py
+./squad64
 ```
 
 This is read-only: it dumps and displays the current project without writing
 to the SQ-64. To replace Track A, Pattern 1, run:
 
 ```bash
-.venv/bin/python main.py --update
+./squad64 --update
 ```
 
 The short form `-u` is equivalent.
@@ -96,8 +102,20 @@ The short form `-u` is equivalent.
 Display the application version with:
 
 ```bash
-.venv/bin/python main.py --version
+./squad64 --version
 ```
+
+Filter the displayed patterns by track, pattern number, or both:
+
+```bash
+./squad64 --track B
+./squad64 --pattern 3
+./squad64 --track D --pattern 8
+```
+
+Tracks are `A` through `D`, and pattern numbers are `1` through `16`. These
+options filter only the printed dump; the complete project is still downloaded
+so update mode can preserve patterns that are not displayed.
 
 The program lists the available MIDI ports. On the SQ-64 ALSA USB interface it
 prefers `MIDI OUT 2` for device responses and the `SEQ` endpoint for data sent
