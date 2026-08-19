@@ -810,9 +810,10 @@ def print_project_dump(
     tempo = (project[20] | project[21] << 8) / 10
 
     print("\nProject dump:")
-    print("  Name   :", project_name or "(unnamed)")
-    print(f"  Tempo  : {tempo:.1f} BPM")
-    print("  Header : 512 bytes")
+    print(
+        f"  Name: {project_name or '(unnamed)'}"
+        f" | BPM: {tempo:.1f}"
+    )
 
     if not filtered_melodies and not filtered_rhythms:
         print("  Patterns: none")
@@ -825,7 +826,7 @@ def print_project_dump(
         print(
             f"    Track {chr(ord('A') + track_index)} / "
             f"Pattern {number + 1}: {name}, "
-            f"{pattern[20]} steps, {len(pattern)} bytes"
+            f"{pattern[20]} steps"
         )
 
         for row in render_melody_steps(pattern):
@@ -835,7 +836,7 @@ def print_project_dump(
         name = decode_name(pattern) or "(unnamed)"
         print(
             f"    Track D / Pattern {number + 1}: {name}, "
-            f"{pattern[20]} steps, {len(pattern)} bytes"
+            f"{pattern[20]} steps"
         )
 
         for subtrack_number in range(16):
