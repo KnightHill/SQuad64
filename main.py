@@ -9,7 +9,18 @@ import sq64
 from sq64_client import SQ64Client
 
 
-__version__ = "0.1.2"
+__version__ = "0.1.3"
+
+TEST_PATTERN_NOTES = [
+    48, None,
+    52, None,
+    55, None,
+    52, None,
+    60, None,
+    55, None,
+    52, None,
+    50, None,
+]
 
 
 def pattern_number(value):
@@ -53,6 +64,7 @@ def parse_args():
         help="show only the selected pattern number in the project dump",
     )
     parser.add_argument(
+        "-v",
         "--version",
         action="version",
         version=f"%(prog)s {__version__}",
@@ -91,7 +103,7 @@ def run(args):
             return
 
         print("Building replicated test pattern locally...")
-        pattern = sq64.build_pattern()
+        pattern = sq64.build_pattern(TEST_PATTERN_NOTES)
 
         print("Sending Track A / Pattern 1...")
         client.send_pattern(

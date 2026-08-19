@@ -62,6 +62,10 @@ Track A, Pattern 1 structure captured from the SQ-64. The pattern is generated
 locally and does not clone an existing pattern at runtime. MIDI note numbers
 are used, with C3 represented as note 48.
 
+The sequence is defined by `TEST_PATTERN_NOTES` in [`main.py`](main.py) and is
+passed to `build_pattern(notes)`. Use `None` for a rest and MIDI note numbers
+from `0` through `127` for played steps.
+
 ## Requirements
 
 - Korg SQ-64 running system version 2.x

@@ -10,6 +10,12 @@ import sq64
 from sq64_client import SQ64Client
 
 
+TEST_PATTERN_NOTES = [
+    48, None, 52, None, 55, None, 52, None,
+    60, None, 55, None, 52, None, 50, None,
+]
+
+
 class RecordingPort:
     def __init__(self, messages=()):
         self.messages = list(messages)
@@ -565,7 +571,7 @@ class PatternTests(unittest.TestCase):
             self.assertEqual(pattern[offset + 40], 19)
 
     def test_build_pattern_encodes_notes_and_rests(self):
-        pattern = sq64.build_pattern()
+        pattern = sq64.build_pattern(TEST_PATTERN_NOTES)
         expected_notes = [48, 52, 55, 52, 60, 55, 52, 50]
 
         self.assertEqual(len(pattern), 3104)
@@ -581,12 +587,32 @@ class PatternTests(unittest.TestCase):
                 self.assertFalse(pattern[offset + 4] & (1 << 3))
                 self.assertFalse(pattern[offset + 47] & 1)
 
+    def test_build_pattern_uses_caller_supplied_length(self):
+        pattern = sq64.build_pattern([60, None, 62])
+
+        self.assertEqual(pattern[20], 3)
+        self.assertEqual(sq64.render_melody_steps(pattern), ["■ ■"])
+
+    def test_build_pattern_rejects_invalid_notes_and_lengths(self):
+        invalid_sequences = (
+            [],
+            [60] * 65,
+            [-1],
+            [128],
+            ["60"],
+        )
+
+        for notes in invalid_sequences:
+            with self.subTest(notes=notes):
+                with self.assertRaises(ValueError):
+                    sq64.build_pattern(notes)
+
 
 class SendTests(unittest.TestCase):
     @patch("sq64.wait_for_ack")
     def test_send_pattern_sends_all_data_in_order_and_finalizes(self, wait_for_ack):
         project = bytearray(512)
-        pattern = sq64.build_pattern()
+        pattern = sq64.build_pattern(TEST_PATTERN_NOTES)
         preserved = bytearray(3104)
         rhythm = bytearray(6176)
         outport = RecordingPort()
@@ -634,7 +660,7 @@ class SendTests(unittest.TestCase):
                 Mock(),
                 outport,
                 bytearray(512),
-                sq64.build_pattern(),
+                sq64.build_pattern(TEST_PATTERN_NOTES),
                 {},
                 {},
             )
@@ -649,7 +675,8 @@ class SendTests(unittest.TestCase):
 
         with self.assertRaisesRegex(RuntimeError, "project size"):
             sq64.send_pattern(
-                Mock(), outport, bytearray(511), sq64.build_pattern(), {}, {}
+                Mock(), outport, bytearray(511),
+                sq64.build_pattern(TEST_PATTERN_NOTES), {}, {}
             )
 
         self.assertEqual(outport.sent, [])

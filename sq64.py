@@ -597,8 +597,23 @@ def build_reference_structure():
     return data
 
 
-def build_pattern():
-    """Build the local 16-step monophonic C-major test pattern."""
+def build_pattern(notes):
+    """Build a melodic pattern from MIDI note numbers and rests."""
+    notes = list(notes)
+
+    if not 1 <= len(notes) <= 64:
+        raise ValueError("Pattern must contain between 1 and 64 steps")
+
+    for note in notes:
+        if note is not None and (
+            not isinstance(note, int)
+            or not 0 <= note <= 127
+        ):
+            raise ValueError(
+                "Pattern notes must be MIDI note numbers from 0 to 127 "
+                "or None"
+            )
+
     # Start with the replicated SQ-64 structure, then overlay the sequence
     # generated entirely on the laptop.
     data = build_reference_structure()
@@ -610,7 +625,7 @@ def build_pattern():
     data[4:20] = name.ljust(16, b" ")
 
     # Pattern length
-    data[20] = 16
+    data[20] = len(notes)
 
     # Scale type = Equal
     data[21] = 0
@@ -625,24 +640,8 @@ def build_pattern():
     # this firmware stores the selected 1/16 timing as 0x10 at
     # byte 28 rather than the 0x20 implied by Korg's published bit table.
     #
-    # Our simple sequence:
-    #
-    # C3  -  E3  -  G3  -  E3  -
-    # C4  -  G3  -  E3  -  D3  -
-    #
     # MIDI convention:
     # C3 = 48
-
-    notes = [
-        48, None,
-        52, None,
-        55, None,
-        52, None,
-        60, None,
-        55, None,
-        52, None,
-        50, None,
-    ]
 
     for step_number, note in enumerate(notes):
         step_offset = 32 + step_number * 48
