@@ -1,3 +1,4 @@
+import sys
 import time
 from typing import (
     Callable,
@@ -43,6 +44,19 @@ MelodyPatterns = Dict[MelodyKey, bytearray]
 RhythmPatterns = Dict[int, bytearray]
 ProjectDump = Tuple[bytearray, MelodyPatterns, RhythmPatterns]
 ProgressCallback = Callable[[], None]
+
+
+# ANSI 256-color cyan shades, ordered from quietest to loudest.  Colors are
+# only emitted for interactive terminals so project dumps remain pipeable and
+# easy to test as plain text.
+VELOCITY_CYAN_COLORS = (23, 30, 36, 37, 43, 44, 45, 51)
+
+
+def _colorize_velocity(symbol: str, velocity: int) -> str:
+    """Color a note symbol with a cyan shade based on its velocity."""
+    color_index = velocity * (len(VELOCITY_CYAN_COLORS) - 1) // 255
+    color = VELOCITY_CYAN_COLORS[color_index]
+    return f"\033[38;5;{color}m{symbol}\033[0m"
 
 
 # ------------------------------------------------------------
@@ -733,18 +747,30 @@ def decode_name(data: Sequence[int]) -> str:
     return bytes(data[4:20]).decode("ascii", errors="replace").rstrip(" \0")
 
 
-def render_melody_steps(pattern: ByteData) -> List[str]:
+def render_melody_steps(
+    pattern: ByteData,
+    *,
+    color: bool = False,
+) -> List[str]:
     """Render all melodic steps as one row with 16-step separators."""
     symbols = []
 
     for step_number in range(pattern[20]):
         step_offset = 32 + step_number * 48
         step_enabled = bool(pattern[step_offset + 47] & 1)
-        has_note = any(
-            pattern[step_offset + note_number * 5 + 4] & (1 << 3)
+        velocities = [
+            pattern[step_offset + note_number * 5 + 1]
             for note_number in range(8)
-        )
-        symbols.append("■" if step_enabled and has_note else " ")
+            if pattern[step_offset + note_number * 5 + 4] & (1 << 3)
+        ]
+        if step_enabled and velocities:
+            symbol = "■"
+            symbols.append(
+                _colorize_velocity(symbol, max(velocities))
+                if color else symbol
+            )
+        else:
+            symbols.append(" ")
 
     return [
         "|".join(
@@ -820,6 +846,7 @@ def print_project_dump(
         return
 
     print("  Patterns:")
+    use_color = sys.stdout.isatty()
 
     for (track_index, number), pattern in filtered_melodies:
         name = decode_name(pattern) or "(unnamed)"
@@ -829,7 +856,7 @@ def print_project_dump(
             f"{pattern[20]} steps"
         )
 
-        for row in render_melody_steps(pattern):
+        for row in render_melody_steps(pattern, color=use_color):
             print(f"      |{row}|")
 
     for number, pattern in filtered_rhythms:
