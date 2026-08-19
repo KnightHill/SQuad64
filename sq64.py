@@ -46,16 +46,18 @@ ProjectDump = Tuple[bytearray, MelodyPatterns, RhythmPatterns]
 ProgressCallback = Callable[[], None]
 
 
-# ANSI 256-color cyan shades, ordered from quietest to loudest.  Colors are
-# only emitted for interactive terminals so project dumps remain pipeable and
-# easy to test as plain text.
-VELOCITY_CYAN_COLORS = (23, 30, 36, 37, 43, 44, 45, 51)
+# VELOCITY_CYAN_COLORS = (23, 24, 31, 37, 38, 44, 45, 51)
+
+# ANSI 256-color grayscale shades, ordered from quietest to loudest.
+# Colors are only emitted for interactive terminals so project dumps remain
+# pipeable and easy to test as plain text.
+VELOCITY_GRAY_COLORS = (238, 240, 242, 244, 246, 248, 250, 255)
 
 
 def _colorize_velocity(symbol: str, velocity: int) -> str:
-    """Color a note symbol with a cyan shade based on its velocity."""
-    color_index = velocity * (len(VELOCITY_CYAN_COLORS) - 1) // 255
-    color = VELOCITY_CYAN_COLORS[color_index]
+    """Color a note symbol with a grayscale shade based on its velocity."""
+    color_index = velocity * (len(VELOCITY_GRAY_COLORS) - 1) // 255
+    color = VELOCITY_GRAY_COLORS[color_index]
     return f"\033[38;5;{color}m{symbol}\033[0m"
 
 

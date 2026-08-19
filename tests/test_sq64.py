@@ -602,11 +602,11 @@ class PatternTests(unittest.TestCase):
 
         rendered = sq64.render_melody_steps(pattern, color=True)[0]
 
-        self.assertIn("\033[38;5;23m■\033[0m", rendered)
-        self.assertIn("\033[38;5;51m■\033[0m", rendered)
+        self.assertIn("\033[38;5;238m■\033[0m", rendered)
+        self.assertIn("\033[38;5;255m■\033[0m", rendered)
         self.assertLess(
-            rendered.index("\033[38;5;23m"),
-            rendered.index("\033[38;5;51m"),
+            rendered.index("\033[38;5;238m"),
+            rendered.index("\033[38;5;255m"),
         )
 
     def test_render_rhythm_steps_uses_selected_subtrack(self):
@@ -636,8 +636,8 @@ class PatternTests(unittest.TestCase):
             color=True,
         )[0]
 
-        self.assertIn("\033[38;5;23m■\033[0m", rendered)
-        self.assertIn("\033[38;5;51m■\033[0m", rendered)
+        self.assertIn("\033[38;5;238m■\033[0m", rendered)
+        self.assertIn("\033[38;5;255m■\033[0m", rendered)
 
     def test_print_project_dump_filters_by_track(self):
         output = io.StringIO()
