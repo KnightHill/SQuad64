@@ -99,6 +99,18 @@ Display the application version with:
 .venv/bin/python main.py --version
 ```
 
+Filter the displayed patterns by track, pattern number, or both:
+
+```bash
+.venv/bin/python main.py --track B
+.venv/bin/python main.py --pattern 3
+.venv/bin/python main.py --track D --pattern 8
+```
+
+Tracks are `A` through `D`, and pattern numbers are `1` through `16`. These
+options filter only the printed dump; the complete project is still downloaded
+so update mode can preserve patterns that are not displayed.
+
 The program lists the available MIDI ports. On the SQ-64 ALSA USB interface it
 prefers `MIDI OUT 2` for device responses and the `SEQ` endpoint for data sent
 to the sequencer. It then:

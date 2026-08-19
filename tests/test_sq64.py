@@ -1,5 +1,6 @@
 import io
 import unittest
+from contextlib import redirect_stdout
 from unittest.mock import ANY, Mock, patch
 
 import mido
@@ -28,6 +29,13 @@ class TtyBuffer(io.StringIO):
 
 def response(function, extra=()):
     return sq64.sq64_sysex(function, extra)
+
+
+def named_pattern(name):
+    pattern = bytearray(32)
+    pattern[:4] = b"PATT"
+    pattern[4:20] = name.encode("ascii").ljust(16, b" ")
+    return pattern
 
 
 class MidiPortTests(unittest.TestCase):
@@ -477,6 +485,73 @@ class PatternTests(unittest.TestCase):
 
         self.assertEqual(sq64.render_rhythm_steps(pattern, 0), ["    "])
         self.assertEqual(sq64.render_rhythm_steps(pattern, 1), ["  ■ "])
+
+    def test_print_project_dump_filters_by_track(self):
+        output = io.StringIO()
+
+        with redirect_stdout(output):
+            sq64.print_project_dump(
+                bytearray(32),
+                {(0, 0): named_pattern("A1"),
+                 (1, 1): named_pattern("B2")},
+                {0: named_pattern("D1")},
+                track="b",
+            )
+
+        rendered = output.getvalue()
+        self.assertIn("Track B / Pattern 2: B2", rendered)
+        self.assertNotIn("Track A / Pattern 1", rendered)
+        self.assertNotIn("Track D / Pattern 1", rendered)
+
+    def test_print_project_dump_filters_by_pattern_number(self):
+        output = io.StringIO()
+
+        with redirect_stdout(output):
+            sq64.print_project_dump(
+                bytearray(32),
+                {(0, 0): named_pattern("A1"),
+                 (1, 1): named_pattern("B2")},
+                {0: named_pattern("D1")},
+                pattern_number=1,
+            )
+
+        rendered = output.getvalue()
+        self.assertIn("Track A / Pattern 1: A1", rendered)
+        self.assertIn("Track D / Pattern 1: D1", rendered)
+        self.assertNotIn("Track B / Pattern 2", rendered)
+
+    def test_print_project_dump_combines_filters_and_handles_no_match(self):
+        project = bytearray(32)
+        rhythms = {
+            0: named_pattern("D1"),
+            1: named_pattern("D2"),
+        }
+        output = io.StringIO()
+
+        with redirect_stdout(output):
+            sq64.print_project_dump(
+                project,
+                {(0, 1): named_pattern("A2")},
+                rhythms,
+                track="D",
+                pattern_number=2,
+            )
+
+        rendered = output.getvalue()
+        self.assertIn("Track D / Pattern 2: D2", rendered)
+        self.assertNotIn("Track D / Pattern 1", rendered)
+        self.assertNotIn("Track A / Pattern 2", rendered)
+
+        no_match = io.StringIO()
+        with redirect_stdout(no_match):
+            sq64.print_project_dump(
+                project,
+                {},
+                rhythms,
+                track="A",
+            )
+
+        self.assertIn("Patterns: none", no_match.getvalue())
 
     def test_build_reference_structure_has_expected_layout(self):
         pattern = sq64.build_reference_structure()

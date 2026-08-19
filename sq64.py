@@ -491,8 +491,31 @@ def render_rhythm_steps(pattern, subtrack_number):
     ]
 
 
-def print_project_dump(project, melody_patterns, rhythm_patterns):
+def print_project_dump(project, melody_patterns, rhythm_patterns, *,
+                       track=None, pattern_number=None):
     """Print a concise summary of a dumped SQ-64 project."""
+    if track is not None:
+        track = track.upper()
+
+    filtered_melodies = [
+        ((track_index, number), pattern)
+        for (track_index, number), pattern in sorted(
+            melody_patterns.items()
+        )
+        if (
+            track in (None, chr(ord("A") + track_index))
+            and pattern_number in (None, number + 1)
+        )
+    ]
+    filtered_rhythms = [
+        (number, pattern)
+        for number, pattern in sorted(rhythm_patterns.items())
+        if (
+            track in (None, "D")
+            and pattern_number in (None, number + 1)
+        )
+    ]
+
     project_name = decode_name(project)
     tempo = (project[20] | project[21] << 8) / 10
 
@@ -501,29 +524,27 @@ def print_project_dump(project, melody_patterns, rhythm_patterns):
     print(f"  Tempo  : {tempo:.1f} BPM")
     print("  Header : 512 bytes")
 
-    if not melody_patterns and not rhythm_patterns:
+    if not filtered_melodies and not filtered_rhythms:
         print("  Patterns: none")
         return
 
     print("  Patterns:")
 
-    for (track, pattern_number), pattern in sorted(
-        melody_patterns.items()
-    ):
+    for (track_index, number), pattern in filtered_melodies:
         name = decode_name(pattern) or "(unnamed)"
         print(
-            f"    Track {chr(ord('A') + track)} / "
-            f"Pattern {pattern_number + 1}: {name}, "
+            f"    Track {chr(ord('A') + track_index)} / "
+            f"Pattern {number + 1}: {name}, "
             f"{pattern[20]} steps, {len(pattern)} bytes"
         )
 
         for row in render_melody_steps(pattern):
             print(f"      |{row:<16}|")
 
-    for pattern_number, pattern in sorted(rhythm_patterns.items()):
+    for number, pattern in filtered_rhythms:
         name = decode_name(pattern) or "(unnamed)"
         print(
-            f"    Track D / Pattern {pattern_number + 1}: {name}, "
+            f"    Track D / Pattern {number + 1}: {name}, "
             f"{pattern[20]} steps, {len(pattern)} bytes"
         )
 

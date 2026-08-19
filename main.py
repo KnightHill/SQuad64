@@ -9,6 +9,19 @@ from sq64_client import SQ64Client
 __version__ = "0.1.2"
 
 
+def pattern_number(value):
+    """Parse a user-facing SQ-64 pattern number."""
+    try:
+        number = int(value)
+    except ValueError as error:
+        raise argparse.ArgumentTypeError("pattern must be an integer") from error
+
+    if not 1 <= number <= 16:
+        raise argparse.ArgumentTypeError("pattern must be between 1 and 16")
+
+    return number
+
+
 def parse_args():
     """Parse command-line options."""
     parser = argparse.ArgumentParser(
@@ -22,6 +35,18 @@ def parse_args():
         "--update",
         action="store_true",
         help="update Track A / Pattern 1 after dumping the project",
+    )
+    parser.add_argument(
+        "--track",
+        type=str.upper,
+        choices=("A", "B", "C", "D"),
+        help="show only the selected track in the project dump",
+    )
+    parser.add_argument(
+        "--pattern",
+        type=pattern_number,
+        metavar="1-16",
+        help="show only the selected pattern number in the project dump",
     )
     parser.add_argument(
         "--version",
@@ -50,7 +75,13 @@ def main():
         project, melody_patterns, rhythm_patterns = (
             client.read_current_project()
         )
-        sq64.print_project_dump(project, melody_patterns, rhythm_patterns)
+        sq64.print_project_dump(
+            project,
+            melody_patterns,
+            rhythm_patterns,
+            track=args.track,
+            pattern_number=args.pattern,
+        )
 
         if not args.update:
             print("\nDone (read-only; use --update to write the pattern).")
