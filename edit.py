@@ -210,12 +210,23 @@ class PatternEditor:
                     self.cursor = max(self.cursor - 1, 0)
                     self.page = self.cursor // PAGE_SIZE
                 elif key.name in (
-                    "KEY_PGDN", "KEY_NPAGE", "NPage", "PAGEDOWN", "PAGE_DOWN"
+                    "KEY_PGDN",
+                    "KEY_PGDOWN",
+                    "KEY_NPAGE",
+                    "KEY_KP_PAGE_DOWN",
+                    "NPage",
+                    "PAGEDOWN",
+                    "PAGE_DOWN",
                 ) or str(key) in ("]", "\x06"):
                     self.page = min(self.page + 1, self.page_count - 1)
                     self.cursor = min(self.page * PAGE_SIZE, len(self.steps) - 1)
                 elif key.name in (
-                    "KEY_PGUP", "KEY_PPAGE", "PPage", "PAGEUP", "PAGE_UP"
+                    "KEY_PGUP",
+                    "KEY_PPAGE",
+                    "KEY_KP_PAGE_UP",
+                    "PPage",
+                    "PAGEUP",
+                    "PAGE_UP",
                 ) or str(key) in ("[", "\x02"):
                     self.page = max(self.page - 1, 0)
                     self.cursor = self.page * PAGE_SIZE
