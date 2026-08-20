@@ -740,6 +740,17 @@ class PatternTests(unittest.TestCase):
         self.assertEqual(pattern[20], 3)
         self.assertEqual(sq64.render_melody_steps(pattern), ["■ ■"])
 
+    def test_build_empty_pattern_is_new_sixteen_step_rest_pattern(self):
+        pattern = sq64.build_empty_pattern()
+
+        self.assertEqual(sq64.decode_name(pattern), "SQUAD64 NEW")
+        self.assertEqual(pattern[20], 16)
+        for step in range(16):
+            offset = 32 + step * 48
+            self.assertEqual(pattern[offset + 1], 127)
+            self.assertFalse(pattern[offset + 4] & (1 << 3))
+            self.assertFalse(pattern[offset + 47] & 1)
+
     def test_build_pattern_rejects_invalid_notes_and_lengths(self):
         invalid_sequences = (
             [],
@@ -756,6 +767,25 @@ class PatternTests(unittest.TestCase):
 
 
 class SendTests(unittest.TestCase):
+    @patch("sq64.wait_for_ack")
+    def test_send_pattern_creates_absent_selected_target(self, wait_for_ack):
+        outport = RecordingPort()
+
+        sq64.send_pattern(
+            Mock(),
+            outport,
+            bytearray(512),
+            sq64.build_empty_pattern(),
+            {},
+            {},
+            target_track=1,
+            target_pattern=2,
+        )
+
+        sent_project = sq64.unpack_7bit(outport.sent[0].data[6:], 512)
+        self.assertTrue(sent_project[42] & (1 << 2))
+        self.assertEqual(outport.sent[1].data[6], 0x12)
+
     @patch("sq64.wait_for_ack")
     def test_send_pattern_sends_all_data_in_order_and_finalizes(self, wait_for_ack):
         project = bytearray(512)

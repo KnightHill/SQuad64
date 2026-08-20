@@ -101,5 +101,12 @@ class EditArgumentTests(unittest.TestCase):
         self.assertEqual(output.getvalue(), "squad64-edit 0.3.0\n")
 
 
+class EditPatternTests(unittest.TestCase):
+    def test_empty_pattern_steps_are_rests_with_default_velocity(self):
+        steps = edit.pattern_steps(edit.sq64.build_empty_pattern())
+
+        self.assertEqual(steps, [(None, 127)] * 16)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -109,13 +109,21 @@ def parse_args():
 class PatternEditor:
     """Blessed one-page editor for one melodic pattern."""
 
-    def __init__(self, term: Terminal, steps: list[io.PatternStep], output: str):
+    def __init__(
+        self,
+        term: Terminal,
+        steps: list[io.PatternStep],
+        output: str,
+        *,
+        is_new: bool = False,
+    ):
         self.term = term
         self.steps = steps
         self.output = output
         self.cursor = 0
         self.page = 0
         self.message = ""
+        self.is_new = is_new
 
     @property
     def page_count(self) -> int:
@@ -127,6 +135,8 @@ class PatternEditor:
         visible = self.steps[start:start + PAGE_SIZE]
         print(term.clear + term.home, end="")
         print(term.bold("SQuad64 Editor"), end="")
+        if self.is_new:
+            print(term.bold_yellow("  EMPTY / NEW PATTERN"), end="")
         print(f"  steps {start + 1}-{start + len(visible)}  page {self.page + 1}/{self.page_count}")
         print(
             f"{'Step':>6} "
@@ -253,10 +263,16 @@ def run(args):
         print("Reading current project and existing patterns...")
         project, melody_patterns, rhythm_patterns = client.read_current_project()
         key = (track, pattern_number)
-        if key not in melody_patterns:
-            raise RuntimeError(f"Track {args.track} / Pattern {args.pattern} is empty")
-        original = melody_patterns[key]
-        editor = PatternEditor(Terminal(), pattern_steps(original), args.output)
+        is_new = key not in melody_patterns
+        original = melody_patterns.get(key)
+        if original is None:
+            original = sq64.build_empty_pattern()
+        editor = PatternEditor(
+            Terminal(),
+            pattern_steps(original),
+            args.output,
+            is_new=is_new,
+        )
         action = editor.run()
         if action == "send":
             updated = apply_steps(original, editor.steps)

@@ -933,6 +933,8 @@ def build_reference_structure() -> bytearray:
 def build_pattern(
     notes: Iterable[Optional[int]],
     velocities: Optional[Iterable[int]] = None,
+    *,
+    name: str = "SQUAD64 TEST",
 ) -> bytearray:
     """Build a melodic pattern from MIDI note numbers and rests."""
     notes = list(notes)
@@ -971,8 +973,10 @@ def build_pattern(
     # Pattern header
     data[0:4] = b"PATT"
 
-    name = b"SQUAD64 TEST"
-    data[4:20] = name.ljust(16, b" ")
+    encoded_name = name.encode("ascii")
+    if not 1 <= len(encoded_name) <= 16:
+        raise ValueError("Pattern name must contain between 1 and 16 ASCII bytes")
+    data[4:20] = encoded_name.ljust(16, b" ")
 
     # Pattern length
     data[20] = len(notes)
@@ -1023,6 +1027,15 @@ def build_pattern(
         data[step_offset + 47] |= 1
 
     return data
+
+
+def build_empty_pattern() -> bytearray:
+    """Build a new 16-step rest pattern using the safe reference structure."""
+    return build_pattern(
+        [None] * 16,
+        [127] * 16,
+        name="SQUAD64 NEW",
+    )
 
 
 # ------------------------------------------------------------
