@@ -90,9 +90,10 @@ To use the editor, provide both a melodic track and a pattern:
 The editor accepts tracks `A` through `C` and pattern numbers `1` through
 `16`. It displays one editable page of up to 16 steps at a time. Use the
 arrow keys to move, `n` to enter a note such as `C4` or `F#3`, `r` for a rest,
-and the up/down arrows to adjust velocity. Use `s` to save and `Ctrl-W` to send
-the selected pattern to the SQ-64. Use `--verbose` with either application to
-list available MIDI ports while connecting.
+and the up/down arrows to adjust velocity. Use `S` to save and `W` to send
+the selected pattern to the SQ-64. Empty patterns cannot be saved or sent;
+enter at least one note first. Use `--verbose` with either application to list
+available MIDI ports while connecting.
 
 If the selected melodic pattern does not exist on the SQ-64, the editor opens
 an `EMPTY / NEW PATTERN` editor with 16 rest steps. Saving writes the new

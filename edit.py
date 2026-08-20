@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 import re
 import sys
-from typing import Optional
+from typing import Callable, Optional
 
 import mido
 from blessed import Terminal
@@ -116,6 +116,7 @@ class PatternEditor:
         output: str,
         *,
         is_new: bool = False,
+        on_send: Optional[Callable[[], None]] = None,
     ):
         self.term = term
         self.steps = steps
@@ -124,6 +125,8 @@ class PatternEditor:
         self.page = 0
         self.message = ""
         self.is_new = is_new
+        self.on_send = on_send
+        self.clipboard: Optional[io.PatternStep] = None
 
     @property
     def page_count(self) -> int:
@@ -137,7 +140,11 @@ class PatternEditor:
         print(term.bold("SQuad64 Editor"), end="")
         if self.is_new:
             print(term.bold_yellow("  EMPTY / NEW PATTERN"), end="")
-        print(f"  steps {start + 1}-{start + len(visible)}  page {self.page + 1}/{self.page_count}")
+        print(
+            f"  length {len(self.steps)} steps  "
+            f"visible {start + 1}-{start + len(visible)}  "
+            f"page {self.page + 1}/{self.page_count}"
+        )
         print(
             f"{'Step':>6} "
             + "  ".join(
@@ -156,8 +163,8 @@ class PatternEditor:
             start,
         )
         print()
-        print("  [←/→] step  [PgUp/PgDn] page  [n] note  [r] rest")
-        print("  [↑/↓] velocity  [s] save  [Ctrl-W] send  [q/Esc] quit")
+        print("  [←/→] step  [PgUp/PgDn] page  [n] note  [r] rest  [c] copy  [p] paste")
+        print("  [↑/↓] velocity  [S] save  [W] send  [q/Esc] quit")
         if self.message:
             print(f"\n  {self.message}")
 
@@ -194,9 +201,15 @@ class PatternEditor:
                 buffer += str(key)
 
     def save(self) -> None:
-        print(self.output, self.steps)
+        if self.is_empty:
+            self.message = "Cannot save an empty pattern; enter at least one note."
+            return
         io.save_pattern(self.output, self.steps)
         self.message = f"Saved {self.output}"
+
+    @property
+    def is_empty(self) -> bool:
+        return not any(note is not None for note, _velocity in self.steps)
 
     def run(self) -> str:
         with (
@@ -209,10 +222,17 @@ class PatternEditor:
                 key = self.term.inkey()
                 if key.name == "ESCAPE" or str(key).lower() == "q":
                     return "quit"
-                if str(key).lower() == "s":
+                if str(key) == "S":
                     self.save()
-                elif key.code == 23:
-                    return "send"
+                elif str(key) == "W":
+                    if self.is_empty:
+                        self.message = "Cannot send an empty pattern; enter at least one note."
+                        continue
+                    if self.on_send is None:
+                        self.message = "Send is unavailable."
+                    else:
+                        self.on_send()
+                        self.message = "Pattern sent to the SQ-64."
                 elif key.name == "KEY_RIGHT" or str(key) == "l":
                     self.cursor = min(self.cursor + 1, len(self.steps) - 1)
                     self.page = self.cursor // PAGE_SIZE
@@ -244,6 +264,15 @@ class PatternEditor:
                     self.edit_note()
                 elif str(key).lower() == "r":
                     self.steps[self.cursor] = (None, self.steps[self.cursor][1])
+                elif str(key).lower() == "c":
+                    self.clipboard = self.steps[self.cursor]
+                    self.message = f"Copied step {self.cursor + 1}."
+                elif str(key).lower() == "p":
+                    if self.clipboard is None:
+                        self.message = "Nothing to paste."
+                    else:
+                        self.steps[self.cursor] = self.clipboard
+                        self.message = f"Pasted to step {self.cursor + 1}."
                 elif key.name == "KEY_UP" or str(key) == "+":
                     note, velocity = self.steps[self.cursor]
                     self.steps[self.cursor] = (note, min(127, velocity + 1))
@@ -267,14 +296,7 @@ def run(args):
         original = melody_patterns.get(key)
         if original is None:
             original = sq64.build_empty_pattern()
-        editor = PatternEditor(
-            Terminal(),
-            pattern_steps(original),
-            args.output,
-            is_new=is_new,
-        )
-        action = editor.run()
-        if action == "send":
+        def send_edited_pattern() -> None:
             updated = apply_steps(original, editor.steps)
             client.send_pattern(
                 project,
@@ -284,7 +306,15 @@ def run(args):
                 target_track=track,
                 target_pattern=pattern_number,
             )
-            print(f"Sent Track {args.track} / Pattern {args.pattern}.")
+
+        editor = PatternEditor(
+            Terminal(),
+            pattern_steps(original),
+            args.output,
+            is_new=is_new,
+        )
+        editor.on_send = send_edited_pattern
+        editor.run()
 
 
 def main():
