@@ -930,9 +930,21 @@ def build_reference_structure() -> bytearray:
     return data
 
 
-def build_pattern(notes: Iterable[Optional[int]]) -> bytearray:
+def build_pattern(
+    notes: Iterable[Optional[int]],
+    velocities: Optional[Iterable[int]] = None,
+    *,
+    name: str = "SQUAD64 TEST",
+) -> bytearray:
     """Build a melodic pattern from MIDI note numbers and rests."""
     notes = list(notes)
+    if velocities is None:
+        velocities = [None] * len(notes)
+    else:
+        velocities = list(velocities)
+
+    if len(velocities) != len(notes):
+        raise ValueError("Pattern notes and velocities must have equal lengths")
 
     if not 1 <= len(notes) <= 64:
         raise ValueError("Pattern must contain between 1 and 64 steps")
@@ -947,6 +959,13 @@ def build_pattern(notes: Iterable[Optional[int]]) -> bytearray:
                 "or None"
             )
 
+    for velocity in velocities:
+        if velocity is not None and (
+            not isinstance(velocity, int)
+            or not 0 <= velocity <= 255
+        ):
+            raise ValueError("Pattern velocities must be raw bytes from 0 to 255")
+
     # Start with the replicated SQ-64 structure, then overlay the sequence
     # generated entirely on the laptop.
     data = build_reference_structure()
@@ -954,8 +973,10 @@ def build_pattern(notes: Iterable[Optional[int]]) -> bytearray:
     # Pattern header
     data[0:4] = b"PATT"
 
-    name = b"SQUAD64 TEST"
-    data[4:20] = name.ljust(16, b" ")
+    encoded_name = name.encode("ascii")
+    if not 1 <= len(encoded_name) <= 16:
+        raise ValueError("Pattern name must contain between 1 and 16 ASCII bytes")
+    data[4:20] = encoded_name.ljust(16, b" ")
 
     # Pattern length
     data[20] = len(notes)
@@ -976,8 +997,11 @@ def build_pattern(notes: Iterable[Optional[int]]) -> bytearray:
     # MIDI convention:
     # C3 = 48
 
-    for step_number, note in enumerate(notes):
+    for step_number, (note, velocity) in enumerate(zip(notes, velocities)):
         step_offset = 32 + step_number * 48
+
+        if velocity is not None:
+            data[step_offset + 1] = velocity
 
         if note is None:
             # Preserve the replicated initialized event data, but disable
@@ -1005,6 +1029,15 @@ def build_pattern(notes: Iterable[Optional[int]]) -> bytearray:
     return data
 
 
+def build_empty_pattern() -> bytearray:
+    """Build a new 16-step rest pattern using the safe reference structure."""
+    return build_pattern(
+        [None] * 16,
+        [255] * 16,
+        name="SQUAD64 NEW",
+    )
+
+
 # ------------------------------------------------------------
 # Send project + pattern
 # ------------------------------------------------------------
@@ -1017,23 +1050,31 @@ def send_pattern(
     melody_patterns: MelodyPatternMap,
     rhythm_patterns: RhythmPatternMap,
     *,
+    target_track: int = 0,
+    target_pattern: int = 0,
     global_channel: Optional[int] = None,
 ) -> None:
-    """Replace A1 while retransmitting all preserved project patterns."""
+    """Replace one melodic pattern while preserving all other patterns."""
     # Validate and pack everything before putting the SQ-64 into receiving
     # project mode.
     if len(project) != 512:
         raise RuntimeError("Invalid project size")
 
     updated_project = bytearray(project)
-    updated_project[40] |= 1  # Track A, Pattern 1 is included below.
+    if not 0 <= target_track <= 2 or not 0 <= target_pattern <= 15:
+        raise ValueError("Invalid melodic pattern target")
+    presence_offset = 40 + target_track * 2 + target_pattern // 8
+    updated_project[presence_offset] |= 1 << (target_pattern % 8)
     project_packed = pack_7bit(updated_project)
 
     if len(project_packed) != 586:
         raise RuntimeError("Invalid project size")
 
     prepared_melodies = []
-    updated_melodies = {**melody_patterns, (0, 0): pattern}
+    updated_melodies = {
+        **melody_patterns,
+        (target_track, target_pattern): pattern,
+    }
     for (track, pattern_number), melody_pattern in sorted(
         updated_melodies.items()
     ):

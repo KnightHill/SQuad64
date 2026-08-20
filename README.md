@@ -39,12 +39,14 @@ a saved project or restarting the SQ-64 may discard edit-buffer changes.
 - A working MIDI connection to the SQ-64
 - [`mido`](https://mido.readthedocs.io/)
 - [`python-rtmidi`](https://pypi.org/project/python-rtmidi/)
+- [`blessed`](https://pypi.org/project/blessed/)
 
 Install the Python dependencies in a virtual environment:
 
 ```bash
 python3 -m venv .venv
 .venv/bin/python -m pip install mido python-rtmidi
+.venv/bin/python -m pip install blessed
 ```
 
 ## Usage
@@ -79,23 +81,36 @@ Dump tracks are `A` through `D`, and pattern numbers are `1` through `16`.
 Filters affect only the printed output; the complete project is still read
 from the SQ-64.
 
-To use the developing editor, provide both a melodic track and a pattern:
+To use the editor, provide both a melodic track and a pattern:
 
 ```bash
 ./edit.py --track A --pattern 1
 ```
 
 The editor accepts tracks `A` through `C` and pattern numbers `1` through
-`16`. Use `--verbose` with either application to list available MIDI ports
-while connecting.
+`16`. It displays one editable page of up to 16 steps at a time. Use the
+arrow keys to move, `n` to enter a note such as `C4` or `F#3`, `r` for a rest,
+and the up/down arrows to adjust velocity. Use `S` to save and `W` to send
+the selected pattern to the SQ-64. Empty patterns cannot be saved or sent;
+enter at least one note first. Use `--verbose` with either application to list
+available MIDI ports while connecting.
+
+Velocities are displayed on the SQ-64 half-step scale from `0` to `127.5`;
+the up/down arrows change velocity by `0.5`.
+
+If the selected melodic pattern does not exist on the SQ-64, the editor opens
+an `EMPTY / NEW PATTERN` editor with 16 rest steps. Saving writes the new
+pattern locally; sending creates it at the selected track and pattern.
 
 ## Pattern files
 
 [`file_io.py`](file_io.py) provides `load_file(filename)` and
-`save_file(filename, notes)` for editable `.pat` pattern files. A pattern must
-contain between 4 and 64 entries. Notes are MIDI numbers from `0` through
-`127`; a rest can be written as `None`, `rest`, or `-`. Entries may be
-separated by spaces or commas, and `#` starts a comment.
+`save_file(filename, notes)` for legacy note-only files, plus
+`load_pattern(filename)` and `save_pattern(filename, steps)` for note/rest and
+velocity pairs. A pattern must contain between 4 and 64 entries. Notes are
+MIDI numbers from `0` through `127`; a rest can be written as `None`, `rest`,
+or `-`. Pattern-file velocities use the same `0` through `127.5` half-step
+scale. Entries may be separated by spaces or commas, and `#` starts a comment.
 
 For example:
 

@@ -39,7 +39,7 @@ class DumpArgumentTests(unittest.TestCase):
                     dump.parse_args()
 
         self.assertEqual(exit_result.exception.code, 0)
-        self.assertEqual(output.getvalue(), "squad64-dump 0.2.4\n")
+        self.assertEqual(output.getvalue(), "squad64-dump 0.3.0\n")
 
 
 class EditArgumentTests(unittest.TestCase):
@@ -55,6 +55,7 @@ class EditArgumentTests(unittest.TestCase):
         self.assertEqual(args.pattern, 16)
         self.assertFalse(args.update)
         self.assertFalse(args.verbose)
+        self.assertEqual(args.output, "retrieved.pat")
 
     def test_track_is_limited_to_a_through_c(self):
         with patch.object(
@@ -97,7 +98,19 @@ class EditArgumentTests(unittest.TestCase):
                     edit.parse_args()
 
         self.assertEqual(exit_result.exception.code, 0)
-        self.assertEqual(output.getvalue(), "squad64-edit 0.2.4\n")
+        self.assertEqual(output.getvalue(), "squad64-edit 0.3.0\n")
+
+
+class EditPatternTests(unittest.TestCase):
+    def test_empty_pattern_steps_are_rests_with_default_velocity(self):
+        steps = edit.pattern_steps(edit.sq64.build_empty_pattern())
+
+        self.assertEqual(steps, [(None, 255)] * 16)
+
+    def test_velocity_display_matches_sq64_half_step_scale(self):
+        self.assertEqual(edit.velocity_text(1), "0")
+        self.assertEqual(edit.velocity_text(100), "49.5")
+        self.assertEqual(edit.velocity_text(255), "127")
 
 
 if __name__ == "__main__":
