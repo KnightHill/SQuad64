@@ -5,6 +5,7 @@ import sys
 
 import mido
 
+import file_io as io
 import sq64
 from sq64_client import SQ64Client
 from version import __version__
@@ -32,6 +33,19 @@ def pattern_number(value):
         raise argparse.ArgumentTypeError("pattern must be between 1 and 16")
 
     return number
+
+
+def pattern_notes(pattern):
+    """Extract MIDI notes and rests from a retrieved melodic pattern."""
+    notes = []
+    for step_number in range(pattern[20]):
+        step_offset = 32 + step_number * 48
+        note_enabled = bool(pattern[step_offset + 4] & (1 << 3))
+        step_enabled = bool(pattern[step_offset + 47] & 1)
+        notes.append(
+            pattern[step_offset] if note_enabled and step_enabled else None
+        )
+    return notes
 
 
 def parse_args():
@@ -104,6 +118,8 @@ def run(args):
             track=args.track,
             pattern_number=args.pattern,
         )
+        pattern = melody_patterns[(ord(args.track) - ord("A"), args.pattern - 1)]
+        io.save_file("retrieved.pat", pattern_notes(pattern))
         """
         if not args.update:
             print("\nDone (read-only; use --update to write the pattern).")
