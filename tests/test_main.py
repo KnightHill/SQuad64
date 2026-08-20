@@ -107,6 +107,11 @@ class EditPatternTests(unittest.TestCase):
 
         self.assertEqual(steps, [(None, 255)] * 16)
 
+    def test_velocity_display_matches_sq64_half_step_scale(self):
+        self.assertEqual(edit.velocity_text(1), "0")
+        self.assertEqual(edit.velocity_text(100), "49.5")
+        self.assertEqual(edit.velocity_text(255), "127")
+
 
 if __name__ == "__main__":
     unittest.main()

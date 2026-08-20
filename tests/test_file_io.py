@@ -30,7 +30,7 @@ class FileIOTests(unittest.TestCase):
             self.assertEqual(file_io.load_file(path), notes)
 
     def test_pattern_file_round_trips_velocities(self):
-        steps = [(48, 200), (None, 0), (60, 254), (64, 160)]
+        steps = [(48, 201), (None, 1), (60, 255), (64, 161)]
 
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "pattern.pat"

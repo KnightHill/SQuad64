@@ -111,8 +111,8 @@ def load_pattern(filename: str | os.PathLike[str]) -> list[PatternStep]:
                     raise ValueError(
                         f"line {line_number}: velocity must be from 0 to 127.5"
                     )
-                raw_velocity = round(display_velocity * 2)
-                if display_velocity != raw_velocity / 2:
+                raw_velocity = round(display_velocity * 2 + 1)
+                if display_velocity != max(0, raw_velocity - 1) / 2:
                     raise ValueError(
                         f"line {line_number}: velocity must use 0.5 steps"
                     )
@@ -154,7 +154,7 @@ def save_pattern(
     path.write_text(
         "".join(
             f"{'None' if note is None else note} "
-            f"{velocity / 2:g}\n"
+            f"{max(0, velocity - 1) / 2:g}\n"
             for note, velocity in steps
         ),
         encoding="utf-8",

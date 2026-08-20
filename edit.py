@@ -40,7 +40,7 @@ def note_name(note: Optional[int]) -> str:
 
 def velocity_text(raw_velocity: int) -> str:
     """Format an SQ-64 raw velocity byte as its displayed half-scale value."""
-    return f"{raw_velocity / 2:g}"
+    return f"{max(0, raw_velocity - 1) / 2:g}"
 
 
 def parse_note(value: str) -> Optional[int]:
