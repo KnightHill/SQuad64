@@ -147,7 +147,7 @@ class PatternEditor:
         )
         print()
         print("  [←/→] step  [PgUp/PgDn] page  [n] note  [r] rest")
-        print("  [↑/↓] velocity  [Ctrl-S] save  [Ctrl-W] send  [q/Esc] quit")
+        print("  [↑/↓] velocity  [s] save  [Ctrl-W] send  [q/Esc] quit")
         if self.message:
             print(f"\n  {self.message}")
 
@@ -184,17 +184,22 @@ class PatternEditor:
                 buffer += str(key)
 
     def save(self) -> None:
+        print(self.output, self.steps)
         io.save_pattern(self.output, self.steps)
         self.message = f"Saved {self.output}"
 
     def run(self) -> str:
-        with self.term.fullscreen(), self.term.cbreak(), self.term.hidden_cursor():
+        with (
+            self.term.fullscreen(),
+            self.term.cbreak(),
+            self.term.hidden_cursor(),
+        ):
             while True:
                 self.draw()
                 key = self.term.inkey()
                 if key.name == "ESCAPE" or str(key).lower() == "q":
                     return "quit"
-                if key.code == 19:
+                if str(key).lower() == "s":
                     self.save()
                 elif key.code == 23:
                     return "send"
