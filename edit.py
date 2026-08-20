@@ -115,7 +115,6 @@ class PatternEditor:
         self.output = output
         self.cursor = 0
         self.page = 0
-        self.mode = "note"
         self.message = ""
 
     @property
@@ -136,15 +135,25 @@ class PatternEditor:
                 for number in range(start + 1, start + len(visible) + 1)
             )
         )
-        self._draw_row("Note", [note_name(note) for note, _velocity in visible], start)
-        self._draw_row("Vel.", [str(velocity) for _note, velocity in visible], start)
+        self._draw_row(
+            "Note",
+            [note_name(note) for note, _velocity in visible],
+            start,
+        )
+        self._draw_row(
+            "Vel.",
+            [str(velocity) if note is not None else "" for note, velocity in visible],
+            start,
+        )
         print()
-        print("  [←/→] step  [PgUp/PgDn] page  [n] note  [v] velocity  [r] rest")
+        print("  [←/→] step  [PgUp/PgDn] page  [n] note  [r] rest")
         print("  [↑/↓] velocity  [Ctrl-S] save  [Ctrl-W] send  [q/Esc] quit")
         if self.message:
             print(f"\n  {self.message}")
 
-    def _draw_row(self, label: str, values: list[str], start: int) -> None:
+    def _draw_row(
+        self, label: str, values: list[str], start: int
+    ) -> None:
         rendered = []
         for index, value in enumerate(values):
             selected = start + index == self.cursor
@@ -206,12 +215,9 @@ class PatternEditor:
                     self.page = max(self.page - 1, 0)
                     self.cursor = self.page * PAGE_SIZE
                 elif str(key).lower() == "n":
-                    self.mode = "note"
                     self.edit_note()
                 elif str(key).lower() == "r":
                     self.steps[self.cursor] = (None, self.steps[self.cursor][1])
-                elif str(key).lower() == "v":
-                    self.mode = "velocity"
                 elif key.name == "KEY_UP" or str(key) == "+":
                     note, velocity = self.steps[self.cursor]
                     self.steps[self.cursor] = (note, min(127, velocity + 1))
