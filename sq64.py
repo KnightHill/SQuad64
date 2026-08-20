@@ -962,9 +962,9 @@ def build_pattern(
     for velocity in velocities:
         if velocity is not None and (
             not isinstance(velocity, int)
-            or not 0 <= velocity <= 127
+            or not 0 <= velocity <= 255
         ):
-            raise ValueError("Pattern velocities must be integers from 0 to 127")
+            raise ValueError("Pattern velocities must be raw bytes from 0 to 255")
 
     # Start with the replicated SQ-64 structure, then overlay the sequence
     # generated entirely on the laptop.
@@ -1033,7 +1033,7 @@ def build_empty_pattern() -> bytearray:
     """Build a new 16-step rest pattern using the safe reference structure."""
     return build_pattern(
         [None] * 16,
-        [127] * 16,
+        [255] * 16,
         name="SQUAD64 NEW",
     )
 

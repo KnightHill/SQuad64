@@ -747,7 +747,7 @@ class PatternTests(unittest.TestCase):
         self.assertEqual(pattern[20], 16)
         for step in range(16):
             offset = 32 + step * 48
-            self.assertEqual(pattern[offset + 1], 127)
+            self.assertEqual(pattern[offset + 1], 255)
             self.assertFalse(pattern[offset + 4] & (1 << 3))
             self.assertFalse(pattern[offset + 47] & 1)
 

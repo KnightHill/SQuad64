@@ -95,6 +95,9 @@ the selected pattern to the SQ-64. Empty patterns cannot be saved or sent;
 enter at least one note first. Use `--verbose` with either application to list
 available MIDI ports while connecting.
 
+Velocities are displayed on the SQ-64 half-step scale from `0` to `127.5`;
+the up/down arrows change velocity by `0.5`.
+
 If the selected melodic pattern does not exist on the SQ-64, the editor opens
 an `EMPTY / NEW PATTERN` editor with 16 rest steps. Saving writes the new
 pattern locally; sending creates it at the selected track and pattern.
@@ -106,8 +109,8 @@ pattern locally; sending creates it at the selected track and pattern.
 `load_pattern(filename)` and `save_pattern(filename, steps)` for note/rest and
 velocity pairs. A pattern must contain between 4 and 64 entries. Notes are
 MIDI numbers from `0` through `127`; a rest can be written as `None`, `rest`,
-or `-`. Entries may be separated by spaces or commas, and `#` starts a
-comment.
+or `-`. Pattern-file velocities use the same `0` through `127.5` half-step
+scale. Entries may be separated by spaces or commas, and `#` starts a comment.
 
 For example:
 

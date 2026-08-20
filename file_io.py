@@ -73,7 +73,8 @@ def load_pattern(filename: str | os.PathLike[str]) -> list[PatternStep]:
     """Load note/rest and velocity pairs from a pattern file.
 
     Each line may contain a note/rest followed by an optional velocity. The
-    velocity defaults to 127 so existing note-only files remain valid.
+    velocity defaults to 255 so existing note-only files remain valid. File
+    velocities use the SQ-64 display scale from 0 through 127.5 in 0.5 steps.
     """
     path = Path(filename)
     steps: list[PatternStep] = []
@@ -98,17 +99,27 @@ def load_pattern(filename: str | os.PathLike[str]) -> list[PatternStep]:
                         f"line {line_number}: invalid note/rest {token!r}"
                     ) from error
 
-            velocity = 127
+            velocity = 255
             if len(pair) == 2:
                 try:
-                    velocity = int(pair[1], 10)
+                    display_velocity = float(pair[1])
                 except ValueError as error:
                     raise ValueError(
                         f"line {line_number}: invalid velocity {pair[1]!r}"
                     ) from error
-            if not 0 <= velocity <= 127:
+                if display_velocity < 0 or display_velocity > 127.5:
+                    raise ValueError(
+                        f"line {line_number}: velocity must be from 0 to 127.5"
+                    )
+                raw_velocity = round(display_velocity * 2)
+                if display_velocity != raw_velocity / 2:
+                    raise ValueError(
+                        f"line {line_number}: velocity must use 0.5 steps"
+                    )
+                velocity = raw_velocity
+            if not 0 <= velocity <= 255:
                 raise ValueError(
-                    f"line {line_number}: velocity must be from 0 to 127"
+                    f"line {line_number}: velocity must be from 0 to 127.5"
                 )
             steps.append((note, velocity))
 
@@ -134,15 +145,16 @@ def save_pattern(
     """Save note/rest and velocity pairs, one step per line."""
     _validate_notes([note for note, _velocity in steps])
     for position, (_note, velocity) in enumerate(steps, start=1):
-        if not isinstance(velocity, int) or not 0 <= velocity <= 127:
+        if not isinstance(velocity, int) or not 0 <= velocity <= 255:
             raise ValueError(
-                f"item {position} velocity must be from 0 to 127, got "
+                f"item {position} raw velocity must be from 0 to 255, got "
                 f"{velocity!r}"
             )
     path = Path(filename)
     path.write_text(
         "".join(
-            f"{'None' if note is None else note} {velocity}\n"
+            f"{'None' if note is None else note} "
+            f"{velocity / 2:g}\n"
             for note, velocity in steps
         ),
         encoding="utf-8",

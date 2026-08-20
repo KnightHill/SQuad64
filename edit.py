@@ -38,6 +38,11 @@ def note_name(note: Optional[int]) -> str:
     return f"{NOTE_NAMES[note % 12]}{note // 12 - 1}"
 
 
+def velocity_text(raw_velocity: int) -> str:
+    """Format an SQ-64 raw velocity byte as its displayed half-scale value."""
+    return f"{raw_velocity / 2:g}"
+
+
 def parse_note(value: str) -> Optional[int]:
     """Parse C4, F#3, Bb2, or - into a MIDI note/rest."""
     value = value.strip()
@@ -67,7 +72,7 @@ def pattern_steps(pattern: sq64.ByteData) -> list[io.PatternStep]:
             pattern[offset + 47] & 1
         )
         note = pattern[offset] if enabled else None
-        steps.append((note, min(pattern[offset + 1], 127)))
+        steps.append((note, pattern[offset + 1]))
     return steps
 
 
@@ -159,7 +164,10 @@ class PatternEditor:
         )
         self._draw_row(
             "Vel.",
-            [str(velocity) if note is not None else "" for note, velocity in visible],
+            [
+                velocity_text(velocity) if note is not None else ""
+                for note, velocity in visible
+            ],
             start,
         )
         print()
@@ -275,7 +283,7 @@ class PatternEditor:
                         self.message = f"Pasted to step {self.cursor + 1}."
                 elif key.name == "KEY_UP" or str(key) == "+":
                     note, velocity = self.steps[self.cursor]
-                    self.steps[self.cursor] = (note, min(127, velocity + 1))
+                    self.steps[self.cursor] = (note, min(255, velocity + 1))
                 elif key.name == "KEY_DOWN" or str(key) == "-":
                     note, velocity = self.steps[self.cursor]
                     self.steps[self.cursor] = (note, max(0, velocity - 1))
