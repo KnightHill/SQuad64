@@ -1,3 +1,4 @@
+import sys
 import time
 from typing import (
     Callable,
@@ -43,6 +44,21 @@ MelodyPatterns = Dict[MelodyKey, bytearray]
 RhythmPatterns = Dict[int, bytearray]
 ProjectDump = Tuple[bytearray, MelodyPatterns, RhythmPatterns]
 ProgressCallback = Callable[[], None]
+
+
+# VELOCITY_CYAN_COLORS = (23, 24, 31, 37, 38, 44, 45, 51)
+
+# ANSI 256-color grayscale shades, ordered from quietest to loudest.
+# Colors are only emitted for interactive terminals so project dumps remain
+# pipeable and easy to test as plain text.
+VELOCITY_GRAY_COLORS = (238, 240, 242, 244, 246, 248, 250, 255)
+
+
+def _colorize_velocity(symbol: str, velocity: int) -> str:
+    """Color a note symbol with a grayscale shade based on its velocity."""
+    color_index = velocity * (len(VELOCITY_GRAY_COLORS) - 1) // 255
+    color = VELOCITY_GRAY_COLORS[color_index]
+    return f"\033[38;5;{color}m{symbol}\033[0m"
 
 
 # ------------------------------------------------------------
@@ -733,18 +749,30 @@ def decode_name(data: Sequence[int]) -> str:
     return bytes(data[4:20]).decode("ascii", errors="replace").rstrip(" \0")
 
 
-def render_melody_steps(pattern: ByteData) -> List[str]:
+def render_melody_steps(
+    pattern: ByteData,
+    *,
+    color: bool = False,
+) -> List[str]:
     """Render all melodic steps as one row with 16-step separators."""
     symbols = []
 
     for step_number in range(pattern[20]):
         step_offset = 32 + step_number * 48
         step_enabled = bool(pattern[step_offset + 47] & 1)
-        has_note = any(
-            pattern[step_offset + note_number * 5 + 4] & (1 << 3)
+        velocities = [
+            pattern[step_offset + note_number * 5 + 1]
             for note_number in range(8)
-        )
-        symbols.append("■" if step_enabled and has_note else " ")
+            if pattern[step_offset + note_number * 5 + 4] & (1 << 3)
+        ]
+        if step_enabled and velocities:
+            symbol = "■"
+            symbols.append(
+                _colorize_velocity(symbol, max(velocities))
+                if color else symbol
+            )
+        else:
+            symbols.append(" ")
 
     return [
         "|".join(
@@ -757,6 +785,8 @@ def render_melody_steps(pattern: ByteData) -> List[str]:
 def render_rhythm_steps(
     pattern: ByteData,
     subtrack_number: int,
+    *,
+    color: bool = False,
 ) -> List[str]:
     """Render one drum sub-track with 16-step separators."""
     symbols = []
@@ -765,7 +795,14 @@ def render_rhythm_steps(
     for step_number in range(pattern[20]):
         step_offset = subtrack_offset + step_number * 6
         trigger_enabled = bool(pattern[step_offset + 3] & (1 << 7))
-        symbols.append("■" if trigger_enabled else " ")
+        if trigger_enabled:
+            symbol = "■"
+            symbols.append(
+                _colorize_velocity(symbol, pattern[step_offset])
+                if color else symbol
+            )
+        else:
+            symbols.append(" ")
 
     return [
         "|".join(
@@ -820,6 +857,7 @@ def print_project_dump(
         return
 
     print("  Patterns:")
+    use_color = sys.stdout.isatty()
 
     for (track_index, number), pattern in filtered_melodies:
         name = decode_name(pattern) or "(unnamed)"
@@ -829,7 +867,7 @@ def print_project_dump(
             f"{pattern[20]} steps"
         )
 
-        for row in render_melody_steps(pattern):
+        for row in render_melody_steps(pattern, color=use_color):
             print(f"      |{row}|")
 
     for number, pattern in filtered_rhythms:
@@ -840,7 +878,11 @@ def print_project_dump(
         )
 
         for subtrack_number in range(16):
-            rows = render_rhythm_steps(pattern, subtrack_number)
+            rows = render_rhythm_steps(
+                pattern,
+                subtrack_number,
+                color=use_color,
+            )
 
             if not any("■" in row for row in rows):
                 continue

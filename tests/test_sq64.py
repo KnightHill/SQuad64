@@ -586,6 +586,29 @@ class PatternTests(unittest.TestCase):
             [16, 1],
         )
 
+    def test_render_melody_steps_colors_notes_by_velocity(self):
+        pattern = bytearray(32 + 2 * 48)
+        pattern[20] = 2
+
+        low_velocity_offset = 32
+        high_velocity_offset = 32 + 48
+        for offset, velocity in (
+            (low_velocity_offset, 0),
+            (high_velocity_offset, 255),
+        ):
+            pattern[offset + 1] = velocity
+            pattern[offset + 4] = 1 << 3
+            pattern[offset + 47] = 1
+
+        rendered = sq64.render_melody_steps(pattern, color=True)[0]
+
+        self.assertIn("\033[38;5;238m■\033[0m", rendered)
+        self.assertIn("\033[38;5;255m■\033[0m", rendered)
+        self.assertLess(
+            rendered.index("\033[38;5;238m"),
+            rendered.index("\033[38;5;255m"),
+        )
+
     def test_render_rhythm_steps_uses_selected_subtrack(self):
         pattern = bytearray(32 + 2 * 384)
         pattern[20] = 4
@@ -593,6 +616,28 @@ class PatternTests(unittest.TestCase):
 
         self.assertEqual(sq64.render_rhythm_steps(pattern, 0), ["    "])
         self.assertEqual(sq64.render_rhythm_steps(pattern, 1), ["  ■ "])
+
+    def test_render_rhythm_steps_colors_triggers_by_velocity(self):
+        pattern = bytearray(32 + 2 * 384)
+        pattern[20] = 2
+
+        low_velocity_offset = 32
+        high_velocity_offset = 32 + 6
+        for offset, velocity in (
+            (low_velocity_offset, 0),
+            (high_velocity_offset, 255),
+        ):
+            pattern[offset] = velocity
+            pattern[offset + 3] = 1 << 7
+
+        rendered = sq64.render_rhythm_steps(
+            pattern,
+            0,
+            color=True,
+        )[0]
+
+        self.assertIn("\033[38;5;238m■\033[0m", rendered)
+        self.assertIn("\033[38;5;255m■\033[0m", rendered)
 
     def test_print_project_dump_filters_by_track(self):
         output = io.StringIO()

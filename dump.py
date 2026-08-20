@@ -7,21 +7,7 @@ import mido
 
 import sq64
 from sq64_client import SQ64Client
-
-
-__version__ = "0.2.2"
-
-TEST_PATTERN_NOTES = [
-    48, None,
-    52, None,
-    55, None,
-    52, None,
-    60, None,
-    55, None,
-    52, None,
-    50, None,
-]
-
+from version import __version__
 
 def pattern_number(value):
     """Parse a user-facing SQ-64 pattern number."""
@@ -39,20 +25,10 @@ def pattern_number(value):
 def parse_args():
     """Parse command-line options."""
     parser = argparse.ArgumentParser(
-        prog="squad64",
-        description=(
-            "SQuad64 dumps the current SQ-64 project and optionally replaces "
-            "Track A / Pattern 1."
-        )
+        prog="squad64-dump",
+        description="SQuad64 dumps the current SQ-64 project."
     )
-    mode = parser.add_mutually_exclusive_group()
-    mode.add_argument(
-        "-u",
-        "--update",
-        action="store_true",
-        help="update Track A / Pattern 1 after dumping the project",
-    )
-    mode.add_argument(
+    parser.add_argument(
         "-g",
         "--global",
         dest="show_global",
@@ -88,7 +64,7 @@ def parse_args():
 
 
 def run(args):
-    """Run one SQ-64 dump or update operation."""
+    """Run one SQ-64 read-only dump operation."""
     input_name, output_name = sq64.find_sq64_ports(verbose=args.verbose)
 
     print()
@@ -121,23 +97,7 @@ def run(args):
             track=args.track,
             pattern_number=args.pattern,
         )
-
-        if not args.update:
-            print("\nDone (read-only; use --update to write the pattern).")
-            return
-
-        print("Building replicated test pattern locally...")
-        pattern = sq64.build_pattern(TEST_PATTERN_NOTES)
-
-        print("Sending Track A / Pattern 1...")
-        client.send_pattern(
-            project,
-            pattern,
-            melody_patterns,
-            rhythm_patterns,
-        )
-
-        print("Done.")
+        print("\nDone (read-only).")
 
 
 def main():
