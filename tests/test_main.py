@@ -39,7 +39,7 @@ class DumpArgumentTests(unittest.TestCase):
                     dump.parse_args()
 
         self.assertEqual(exit_result.exception.code, 0)
-        self.assertEqual(output.getvalue(), "squad64-dump 0.2.4\n")
+        self.assertEqual(output.getvalue(), "squad64-dump 0.3.0\n")
 
 
 class EditArgumentTests(unittest.TestCase):
@@ -55,6 +55,7 @@ class EditArgumentTests(unittest.TestCase):
         self.assertEqual(args.pattern, 16)
         self.assertFalse(args.update)
         self.assertFalse(args.verbose)
+        self.assertEqual(args.output, "retrieved.pat")
 
     def test_track_is_limited_to_a_through_c(self):
         with patch.object(
@@ -97,7 +98,7 @@ class EditArgumentTests(unittest.TestCase):
                     edit.parse_args()
 
         self.assertEqual(exit_result.exception.code, 0)
-        self.assertEqual(output.getvalue(), "squad64-edit 0.2.4\n")
+        self.assertEqual(output.getvalue(), "squad64-edit 0.3.0\n")
 
 
 if __name__ == "__main__":

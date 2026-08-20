@@ -8,6 +8,9 @@ from pathlib import Path
 from typing import Optional
 
 
+PatternStep = tuple[Optional[int], int]
+
+
 MIN_NOTES = 4
 MAX_NOTES = 64
 MIN_MIDI_NOTE = 0
@@ -46,7 +49,6 @@ def load_file(filename: str | os.PathLike[str]) -> list[Optional[int]]:
     """
     path = Path(filename)
     values: list[Optional[int]] = []
-
     for line_number, line in enumerate(
         path.read_text(encoding="utf-8").splitlines(), start=1
     ):
@@ -58,15 +60,60 @@ def load_file(filename: str | os.PathLike[str]) -> list[Optional[int]]:
                 values.append(None)
                 continue
             try:
-                note = int(token, 10)
+                values.append(int(token, 10))
             except ValueError as error:
                 raise ValueError(
                     f"line {line_number}: invalid note/rest {token!r}"
                 ) from error
-            values.append(note)
-
     _validate_notes(values)
     return values
+
+
+def load_pattern(filename: str | os.PathLike[str]) -> list[PatternStep]:
+    """Load note/rest and velocity pairs from a pattern file.
+
+    Each line may contain a note/rest followed by an optional velocity. The
+    velocity defaults to 127 so existing note-only files remain valid.
+    """
+    path = Path(filename)
+    steps: list[PatternStep] = []
+
+    for line_number, line in enumerate(
+        path.read_text(encoding="utf-8").splitlines(), start=1
+    ):
+        content = line.split("#", 1)[0].strip()
+        if not content:
+            continue
+        tokens = [token for token in re.split(r"[\s,]+", content) if token]
+        pairs = [tokens] if len(tokens) == 2 else [[token] for token in tokens]
+        for pair in pairs:
+            token = pair[0]
+            if token.lower() in REST_TOKENS:
+                note = None
+            else:
+                try:
+                    note = int(token, 10)
+                except ValueError as error:
+                    raise ValueError(
+                        f"line {line_number}: invalid note/rest {token!r}"
+                    ) from error
+
+            velocity = 127
+            if len(pair) == 2:
+                try:
+                    velocity = int(pair[1], 10)
+                except ValueError as error:
+                    raise ValueError(
+                        f"line {line_number}: invalid velocity {pair[1]!r}"
+                    ) from error
+            if not 0 <= velocity <= 127:
+                raise ValueError(
+                    f"line {line_number}: velocity must be from 0 to 127"
+                )
+            steps.append((note, velocity))
+
+    _validate_notes([note for note, _velocity in steps])
+    return steps
 
 
 def save_file(
@@ -77,5 +124,26 @@ def save_file(
     path = Path(filename)
     path.write_text(
         "".join("None\n" if note is None else f"{note}\n" for note in notes),
+        encoding="utf-8",
+    )
+
+
+def save_pattern(
+    filename: str | os.PathLike[str], steps: list[PatternStep]
+) -> None:
+    """Save note/rest and velocity pairs, one step per line."""
+    _validate_notes([note for note, _velocity in steps])
+    for position, (_note, velocity) in enumerate(steps, start=1):
+        if not isinstance(velocity, int) or not 0 <= velocity <= 127:
+            raise ValueError(
+                f"item {position} velocity must be from 0 to 127, got "
+                f"{velocity!r}"
+            )
+    path = Path(filename)
+    path.write_text(
+        "".join(
+            f"{'None' if note is None else note} {velocity}\n"
+            for note, velocity in steps
+        ),
         encoding="utf-8",
     )
