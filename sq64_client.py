@@ -115,8 +115,21 @@ class SQ64Client:
         pattern: sq64.ByteData,
         melody_patterns: sq64.MelodyPatternMap,
         rhythm_patterns: sq64.RhythmPatternMap,
+        *,
+        target_track: int = 0,
+        target_pattern: int = 0,
     ) -> None:
-        """Replace A1 while preserving this SQ-64's other patterns."""
+        """Replace one melodic pattern while preserving other patterns."""
+        if target_track == 0 and target_pattern == 0:
+            return sq64.send_pattern(
+                self.inport,
+                self.outport,
+                project,
+                pattern,
+                melody_patterns,
+                rhythm_patterns,
+                global_channel=self.global_channel,
+            )
         return sq64.send_pattern(
             self.inport,
             self.outport,
@@ -124,5 +137,7 @@ class SQ64Client:
             pattern,
             melody_patterns,
             rhythm_patterns,
+            target_track=target_track,
+            target_pattern=target_pattern,
             global_channel=self.global_channel,
         )
