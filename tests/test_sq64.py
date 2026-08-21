@@ -233,6 +233,8 @@ class ClientTests(unittest.TestCase):
             b"pattern",
             {},
             {},
+            target_track=0,
+            target_pattern=0,
             global_channel=6,
         )
 
@@ -767,6 +769,27 @@ class PatternTests(unittest.TestCase):
 
 
 class SendTests(unittest.TestCase):
+    def test_send_pattern_rejects_incomplete_project_data(self):
+        project = bytearray(512)
+        project[40] = 1 << 1
+        project[46] = 1
+        outport = RecordingPort()
+
+        with self.assertRaisesRegex(
+            RuntimeError,
+            "Track A / Pattern 2, Track D / Pattern 1",
+        ):
+            sq64.send_pattern(
+                Mock(),
+                outport,
+                project,
+                sq64.build_empty_pattern(),
+                {},
+                {},
+            )
+
+        self.assertEqual(outport.sent, [])
+
     @patch("sq64.wait_for_ack")
     def test_send_pattern_creates_absent_selected_target(self, wait_for_ack):
         outport = RecordingPort()
@@ -785,6 +808,39 @@ class SendTests(unittest.TestCase):
         sent_project = sq64.unpack_7bit(outport.sent[0].data[6:], 512)
         self.assertTrue(sent_project[42] & (1 << 2))
         self.assertEqual(outport.sent[1].data[6], 0x12)
+
+    @patch("sq64.wait_for_ack")
+    def test_send_pattern_preserves_existing_patterns(self, wait_for_ack):
+        outport = RecordingPort()
+        other_melody = bytearray(3104)
+        other_rhythm = bytearray(6176)
+
+        sq64.send_pattern(
+            Mock(),
+            outport,
+            bytearray(512),
+            sq64.build_empty_pattern(),
+            {(0, 0): other_melody, (2, 0): other_melody},
+            {0: other_rhythm},
+            target_track=1,
+            target_pattern=2,
+        )
+
+        self.assertEqual(
+            [message.data[6] for message in outport.sent[1:4]],
+            [0x00, 0x12, 0x20],
+        )
+        self.assertEqual(
+            [sq64.get_function(message) for message in outport.sent],
+            [
+                sq64.FUNC_CURRENT_PROJECT_DUMP,
+                sq64.FUNC_MELODY_PATTERN_DUMP,
+                sq64.FUNC_MELODY_PATTERN_DUMP,
+                sq64.FUNC_MELODY_PATTERN_DUMP,
+                sq64.FUNC_RHYTHM_PATTERN_DUMP,
+                sq64.FUNC_FINALIZE,
+            ],
+        )
 
     @patch("sq64.wait_for_ack")
     def test_send_pattern_sends_all_data_in_order_and_finalizes(self, wait_for_ack):
@@ -829,6 +885,44 @@ class SendTests(unittest.TestCase):
                 "project finalize",
             ],
         )
+
+    @patch("sq64.Path.read_text", return_value="4096")
+    def test_send_pattern_rejects_small_alsa_output_buffer(self, _read_text):
+        outport = RecordingPort()
+        outport._device_type = "RtMidi/LINUX_ALSA"
+        project = bytearray(512)
+        project[46] = 1
+
+        with self.assertRaisesRegex(RuntimeError, "setup-midi-buffer.sh"):
+            sq64.send_pattern(
+                Mock(),
+                outport,
+                project,
+                sq64.build_empty_pattern(),
+                {},
+                {0: bytearray(6176)},
+            )
+
+        self.assertEqual(outport.sent, [])
+
+    @patch("sq64.wait_for_ack")
+    @patch("sq64.Path.read_text", return_value="4096")
+    def test_send_pattern_allows_small_buffer_without_rhythm_data(
+        self, _read_text, _wait_for_ack
+    ):
+        outport = RecordingPort()
+        outport._device_type = "RtMidi/LINUX_ALSA"
+
+        sq64.send_pattern(
+            Mock(),
+            outport,
+            bytearray(512),
+            sq64.build_empty_pattern(),
+            {},
+            {},
+        )
+
+        self.assertEqual(len(outport.sent), 3)
 
     @patch("sq64.wait_for_ack")
     def test_send_pattern_finalizes_after_transfer_error(self, wait_for_ack):

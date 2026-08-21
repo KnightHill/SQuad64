@@ -95,6 +95,10 @@ the selected pattern to the SQ-64. Empty patterns cannot be saved or sent;
 enter at least one note first. Use `--verbose` with either application to list
 available MIDI ports while connecting.
 
+The one-note-per-step editor supports MONO patterns only. It refuses CHORD,
+ARP, or patterns containing additional hidden note events so those events
+cannot be lost or misrepresented during editing.
+
 Velocities are displayed on the SQ-64 half-step scale from `0` to `127`;
 values may include `.5` (for example, `49.5`), and the up/down arrows change
 velocity by `0.5`.
@@ -108,7 +112,7 @@ pattern locally; sending creates it at the selected track and pattern.
 [`file_io.py`](file_io.py) provides `load_file(filename)` and
 `save_file(filename, notes)` for legacy note-only files, plus
 `load_pattern(filename)` and `save_pattern(filename, steps)` for note/rest and
-velocity pairs. A pattern must contain between 4 and 64 entries. Notes are
+velocity pairs. A pattern must contain between 1 and 64 entries. Notes are
 MIDI numbers from `0` through `127`; a rest can be written as `None`, `rest`,
 or `-`. Pattern-file velocities use the same `0` through `127` half-step
 scale. Entries may be separated by spaces or commas, and `#` starts a comment.
@@ -128,6 +132,46 @@ The SQ-64 global MIDI channel is currently set by `GLOBAL_CHANNEL` in
 
 On the SQ-64 ALSA USB interface the program prefers `MIDI OUT 2` for device
 responses and the `SEQ` endpoint for data sent to the sequencer.
+
+### Linux SysEx output buffer
+
+Linux's `snd_seq_midi` bridge defaults to a 4,096-byte output buffer. Melody
+pattern dumps for tracks A-C are about 3.5 KB and fit, but a Track D rhythm
+pattern dump is 7,068 bytes. With the default buffer, Linux truncates the
+Track D message before its terminating `F7` byte. The SQ-64 then remains on
+`Receiving...`, cannot acknowledge the pattern, and ignores the project
+finalize message.
+
+Increase the buffer to 8,192 bytes before starting the editor:
+
+```bash
+./setup-midi-buffer.sh
+```
+
+The script checks the current value, requests administrator access only when
+the buffer needs changing, and verifies the new value. The editor also checks
+the buffer before sending, so it will refuse an unsafe transfer rather than
+leave the SQ-64 in receive mode.
+
+The setting lasts until reboot or until `snd_seq_midi` is reloaded. Run the
+script again after either event. If the SQ-64 is already stuck on
+`Receiving...`, power-cycle it before retrying the transfer.
+
+To make the 8,192-byte buffer permanent, create a modprobe configuration:
+
+```bash
+echo 'options snd_seq_midi output_buffer_size=8192' \
+  | sudo tee /etc/modprobe.d/sq64-midi-buffer.conf
+```
+
+Reboot, then verify that the setting was applied:
+
+```bash
+cat /sys/module/snd_seq_midi/parameters/output_buffer_size
+```
+
+The command should print `8192`. With this configuration in place, the setup
+script does not need to be run after each reboot.
 
 ## Official Korg documentation
 
@@ -153,3 +197,8 @@ The relevant SysEx functions are:
 | Rhythm pattern dump | `0x49` |
 | Project dump finalize | `0x70` |
 | Acknowledgement | `0x23` |
+
+Korg requires project dumps to use the fixed `0x41`, pattern dumps, `0x70`
+sequence. A `0x48` pattern dump cannot be sent independently, and patterns
+omitted from a project transfer are cleared. Pattern updates therefore always
+retransmit every existing melodic and rhythm pattern.
