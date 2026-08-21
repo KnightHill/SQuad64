@@ -129,16 +129,45 @@ The SQ-64 global MIDI channel is currently set by `GLOBAL_CHANNEL` in
 On the SQ-64 ALSA USB interface the program prefers `MIDI OUT 2` for device
 responses and the `SEQ` endpoint for data sent to the sequencer.
 
-Linux's ALSA sequencer MIDI bridge defaults to a 4,096-byte output buffer,
-which is too small for the SQ-64's 7,068-byte Track D SysEx message. Increase
-it to 8,192 bytes before starting the editor:
+### Linux SysEx output buffer
+
+Linux's `snd_seq_midi` bridge defaults to a 4,096-byte output buffer. Melody
+pattern dumps for tracks A-C are about 3.5 KB and fit, but a Track D rhythm
+pattern dump is 7,068 bytes. With the default buffer, Linux truncates the
+Track D message before its terminating `F7` byte. The SQ-64 then remains on
+`Receiving...`, cannot acknowledge the pattern, and ignores the project
+finalize message.
+
+Increase the buffer to 8,192 bytes before starting the editor:
 
 ```bash
 ./setup-midi-buffer.sh
 ```
 
-The script requests administrator access only when the buffer needs changing.
-The setting lasts until reboot or until `snd_seq_midi` is reloaded.
+The script checks the current value, requests administrator access only when
+the buffer needs changing, and verifies the new value. The editor also checks
+the buffer before sending, so it will refuse an unsafe transfer rather than
+leave the SQ-64 in receive mode.
+
+The setting lasts until reboot or until `snd_seq_midi` is reloaded. Run the
+script again after either event. If the SQ-64 is already stuck on
+`Receiving...`, power-cycle it before retrying the transfer.
+
+To make the 8,192-byte buffer permanent, create a modprobe configuration:
+
+```bash
+echo 'options snd_seq_midi output_buffer_size=8192' \
+  | sudo tee /etc/modprobe.d/sq64-midi-buffer.conf
+```
+
+Reboot, then verify that the setting was applied:
+
+```bash
+cat /sys/module/snd_seq_midi/parameters/output_buffer_size
+```
+
+The command should print `8192`. With this configuration in place, the setup
+script does not need to be run after each reboot.
 
 ## Official Korg documentation
 
