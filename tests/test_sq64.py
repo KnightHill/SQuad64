@@ -769,6 +769,27 @@ class PatternTests(unittest.TestCase):
 
 
 class SendTests(unittest.TestCase):
+    def test_send_pattern_rejects_incomplete_project_data(self):
+        project = bytearray(512)
+        project[40] = 1 << 1
+        project[46] = 1
+        outport = RecordingPort()
+
+        with self.assertRaisesRegex(
+            RuntimeError,
+            "Track A / Pattern 2, Track D / Pattern 1",
+        ):
+            sq64.send_pattern(
+                Mock(),
+                outport,
+                project,
+                sq64.build_empty_pattern(),
+                {},
+                {},
+            )
+
+        self.assertEqual(outport.sent, [])
+
     @patch("sq64.wait_for_ack")
     def test_send_pattern_creates_absent_selected_target(self, wait_for_ack):
         outport = RecordingPort()
@@ -869,18 +890,39 @@ class SendTests(unittest.TestCase):
     def test_send_pattern_rejects_small_alsa_output_buffer(self, _read_text):
         outport = RecordingPort()
         outport._device_type = "RtMidi/LINUX_ALSA"
+        project = bytearray(512)
+        project[46] = 1
 
         with self.assertRaisesRegex(RuntimeError, "setup-midi-buffer.sh"):
             sq64.send_pattern(
                 Mock(),
                 outport,
-                bytearray(512),
+                project,
                 sq64.build_empty_pattern(),
                 {},
-                {},
+                {0: bytearray(6176)},
             )
 
         self.assertEqual(outport.sent, [])
+
+    @patch("sq64.wait_for_ack")
+    @patch("sq64.Path.read_text", return_value="4096")
+    def test_send_pattern_allows_small_buffer_without_rhythm_data(
+        self, _read_text, _wait_for_ack
+    ):
+        outport = RecordingPort()
+        outport._device_type = "RtMidi/LINUX_ALSA"
+
+        sq64.send_pattern(
+            Mock(),
+            outport,
+            bytearray(512),
+            sq64.build_empty_pattern(),
+            {},
+            {},
+        )
+
+        self.assertEqual(len(outport.sent), 3)
 
     @patch("sq64.wait_for_ack")
     def test_send_pattern_finalizes_after_transfer_error(self, wait_for_ack):

@@ -64,7 +64,8 @@ def parse_note(value: str) -> Optional[int]:
 
 
 def pattern_steps(pattern: sq64.ByteData) -> list[io.PatternStep]:
-    """Extract editable notes and clamped velocities from a SQ-64 pattern."""
+    """Extract editable notes and velocities from a mono SQ-64 pattern."""
+    _require_mono_pattern(pattern)
     steps = []
     for step_number in range(pattern[20]):
         offset = 32 + step_number * 48
@@ -76,10 +77,33 @@ def pattern_steps(pattern: sq64.ByteData) -> list[io.PatternStep]:
     return steps
 
 
+def _require_mono_pattern(pattern: sq64.ByteData) -> None:
+    """Reject pattern data that the one-note-per-step UI cannot represent."""
+    if pattern[23] != 0:
+        raise RuntimeError(
+            "The editor supports only MONO patterns; this pattern uses "
+            "CHORD or ARP mode."
+        )
+
+    for step_number in range(pattern[20]):
+        offset = 32 + step_number * 48
+        hidden_notes = [
+            note_number + 1
+            for note_number in range(1, 8)
+            if pattern[offset + note_number * 5 + 4] & (1 << 3)
+        ]
+        if hidden_notes:
+            raise RuntimeError(
+                f"The editor cannot safely represent step {step_number + 1}; "
+                "it contains additional note events."
+            )
+
+
 def apply_steps(
     pattern: sq64.ByteData, steps: list[io.PatternStep]
 ) -> bytearray:
     """Apply editable note/velocity values to a retrieved pattern."""
+    _require_mono_pattern(pattern)
     if len(steps) != pattern[20]:
         raise ValueError("edited pattern length does not match retrieved pattern")
     result = bytearray(pattern)

@@ -95,6 +95,10 @@ the selected pattern to the SQ-64. Empty patterns cannot be saved or sent;
 enter at least one note first. Use `--verbose` with either application to list
 available MIDI ports while connecting.
 
+The one-note-per-step editor supports MONO patterns only. It refuses CHORD,
+ARP, or patterns containing additional hidden note events so those events
+cannot be lost or misrepresented during editing.
+
 Velocities are displayed on the SQ-64 half-step scale from `0` to `127`;
 values may include `.5` (for example, `49.5`), and the up/down arrows change
 velocity by `0.5`.

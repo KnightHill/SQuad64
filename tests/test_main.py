@@ -111,6 +111,25 @@ class EditPatternTests(unittest.TestCase):
         self.assertEqual(edit.velocity_text(100), "49.5")
         self.assertEqual(edit.velocity_text(255), "127")
 
+    def test_chord_and_arp_patterns_are_rejected(self):
+        for mode in (1, 2):
+            with self.subTest(mode=mode):
+                pattern = edit.sq64.build_pattern([60])
+                pattern[23] = mode
+
+                with self.assertRaisesRegex(RuntimeError, "MONO"):
+                    edit.pattern_steps(pattern)
+
+    def test_hidden_additional_note_events_are_rejected(self):
+        pattern = edit.sq64.build_pattern([60])
+        pattern[32 + 5 + 4] |= 1 << 3
+
+        with self.assertRaisesRegex(RuntimeError, "additional note events"):
+            edit.pattern_steps(pattern)
+
+        with self.assertRaisesRegex(RuntimeError, "additional note events"):
+            edit.apply_steps(pattern, [(60, 255)])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1083,19 +1083,54 @@ def send_pattern(
     global_channel: Optional[int] = None,
 ) -> None:
     """Replace one melodic pattern while preserving all other patterns."""
-    # Linux's snd_seq_midi defaults to one 4096-byte page. It silently
-    # truncates the 7068-byte Track D SysEx before F7, leaving the SQ-64
-    # stuck on "Receiving...". Check before entering project-receive mode.
-    ensure_large_sysex_output(outport)
-
     # Validate and pack everything before putting the SQ-64 into receiving
     # project mode.
     if len(project) != 512:
         raise RuntimeError("Invalid project size")
 
-    updated_project = bytearray(project)
     if not 0 <= target_track <= 2 or not 0 <= target_pattern <= 15:
         raise ValueError("Invalid melodic pattern target")
+
+    expected_melodies = {
+        (track, pattern_number)
+        for track in range(3)
+        for pattern_number in range(16)
+        if project[40 + track * 2 + pattern_number // 8]
+        & (1 << (pattern_number % 8))
+    }
+    expected_rhythms = {
+        pattern_number
+        for pattern_number in range(16)
+        if project[46 + pattern_number // 8]
+        & (1 << (pattern_number % 8))
+    }
+    missing_melodies = sorted(
+        expected_melodies
+        - set(melody_patterns)
+        - {(target_track, target_pattern)}
+    )
+    missing_rhythms = sorted(expected_rhythms - set(rhythm_patterns))
+    if missing_melodies or missing_rhythms:
+        missing_labels = [
+            f"Track {chr(ord('A') + track)} / Pattern {number + 1}"
+            for track, number in missing_melodies
+        ]
+        missing_labels.extend(
+            f"Track D / Pattern {number + 1}"
+            for number in missing_rhythms
+        )
+        raise RuntimeError(
+            "Cannot preserve project; missing pattern data: "
+            + ", ".join(missing_labels)
+        )
+
+    # Linux's snd_seq_midi defaults to one 4096-byte page. It silently
+    # truncates the 7068-byte Track D SysEx before F7, leaving the SQ-64
+    # stuck on "Receiving...". Check only when rhythm data will be sent.
+    if rhythm_patterns:
+        ensure_large_sysex_output(outport)
+
+    updated_project = bytearray(project)
     presence_offset = 40 + target_track * 2 + target_pattern // 8
     updated_project[presence_offset] |= 1 << (target_pattern % 8)
     project_packed = pack_7bit(updated_project)
