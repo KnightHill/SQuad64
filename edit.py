@@ -102,7 +102,6 @@ def parse_args():
         prog="squad64-edit",
         description="Edit one melodic SQ-64 pattern in a one-page terminal UI.",
     )
-    parser.add_argument("-u", "--update", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--verbose", action="store_true", help="list MIDI ports")
     parser.add_argument("-t", "--track", type=str.upper, choices=("A", "B", "C"), required=True)
     parser.add_argument("-p", "--pattern", type=pattern_number, metavar="1-16", required=True)

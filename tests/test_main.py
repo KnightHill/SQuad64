@@ -53,7 +53,6 @@ class EditArgumentTests(unittest.TestCase):
 
         self.assertEqual(args.track, "C")
         self.assertEqual(args.pattern, 16)
-        self.assertFalse(args.update)
         self.assertFalse(args.verbose)
         self.assertEqual(args.output, "retrieved.pat")
 

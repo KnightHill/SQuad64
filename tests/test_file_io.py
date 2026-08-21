@@ -30,7 +30,7 @@ class FileIOTests(unittest.TestCase):
             self.assertEqual(file_io.load_file(path), notes)
 
     def test_pattern_file_round_trips_velocities(self):
-        steps = [(48, 201), (None, 1), (60, 255), (64, 161)]
+        steps = [(48, 201), (None, 0), (60, 255), (64, 161)]
 
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "pattern.pat"
@@ -41,6 +41,14 @@ class FileIOTests(unittest.TestCase):
                 "48 100\nNone 0\n60 127\n64 80\n",
             )
             self.assertEqual(file_io.load_pattern(path), steps)
+
+    def test_pattern_file_round_trips_raw_zero_velocity(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "pattern.pat"
+            steps = [(48, 0), (None, 255), (52, 1), (55, 201)]
+            file_io.save_pattern(path, steps)
+
+            self.assertEqual(file_io.load_pattern(path)[0], (48, 0))
 
     def test_pattern_file_defaults_legacy_velocity(self):
         with tempfile.TemporaryDirectory() as directory:

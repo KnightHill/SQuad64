@@ -74,7 +74,7 @@ def load_pattern(filename: str | os.PathLike[str]) -> list[PatternStep]:
 
     Each line may contain a note/rest followed by an optional velocity. The
     velocity defaults to 255 so existing note-only files remain valid. File
-    velocities use the SQ-64 display scale from 0 through 127.5 in 0.5 steps.
+    velocities use the SQ-64 display scale from 0 through 127 in 0.5 steps.
     """
     path = Path(filename)
     steps: list[PatternStep] = []
@@ -107,11 +107,15 @@ def load_pattern(filename: str | os.PathLike[str]) -> list[PatternStep]:
                     raise ValueError(
                         f"line {line_number}: invalid velocity {pair[1]!r}"
                     ) from error
-                if display_velocity < 0 or display_velocity > 127.5:
+                if display_velocity < 0 or display_velocity > 127:
                     raise ValueError(
-                        f"line {line_number}: velocity must be from 0 to 127.5"
+                        f"line {line_number}: velocity must be from 0 to 127"
                     )
-                raw_velocity = round(display_velocity * 2 + 1)
+                raw_velocity = (
+                    0
+                    if display_velocity == 0
+                    else round(display_velocity * 2 + 1)
+                )
                 if display_velocity != max(0, raw_velocity - 1) / 2:
                     raise ValueError(
                         f"line {line_number}: velocity must use 0.5 steps"
@@ -119,7 +123,7 @@ def load_pattern(filename: str | os.PathLike[str]) -> list[PatternStep]:
                 velocity = raw_velocity
             if not 0 <= velocity <= 255:
                 raise ValueError(
-                    f"line {line_number}: velocity must be from 0 to 127.5"
+                    f"line {line_number}: velocity must be from 0 to 127"
                 )
             steps.append((note, velocity))
 
