@@ -30,7 +30,7 @@ class FileIOTests(unittest.TestCase):
             self.assertEqual(file_io.load_file(path), notes)
 
     def test_pattern_file_round_trips_velocities(self):
-        steps = [(48, 201), (None, 1), (60, 255), (64, 161)]
+        steps = [(48, 201), (None, 0), (60, 255), (64, 161)]
 
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "pattern.pat"
@@ -42,6 +42,14 @@ class FileIOTests(unittest.TestCase):
             )
             self.assertEqual(file_io.load_pattern(path), steps)
 
+    def test_pattern_file_round_trips_raw_zero_velocity(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "pattern.pat"
+            steps = [(48, 0), (None, 255), (52, 1), (55, 201)]
+            file_io.save_pattern(path, steps)
+
+            self.assertEqual(file_io.load_pattern(path)[0], (48, 0))
+
     def test_pattern_file_defaults_legacy_velocity(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "pattern.pat"
@@ -52,8 +60,15 @@ class FileIOTests(unittest.TestCase):
                 [(48, 255), (None, 255), (52, 255), (55, 255)],
             )
 
-    def test_length_must_be_between_four_and_sixty_four(self):
-        for notes in ([48, None, 52], list(range(65))):
+    def test_one_step_pattern_round_trips(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "pattern.pat"
+            file_io.save_pattern(path, [(48, 255)])
+
+            self.assertEqual(file_io.load_pattern(path), [(48, 255)])
+
+    def test_length_must_be_between_one_and_sixty_four(self):
+        for notes in ([], list(range(65))):
             with self.subTest(length=len(notes)):
                 with self.assertRaises(ValueError):
                     file_io.save_file("unused.pat", notes)

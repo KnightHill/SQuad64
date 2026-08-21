@@ -120,16 +120,6 @@ class SQ64Client:
         target_pattern: int = 0,
     ) -> None:
         """Replace one melodic pattern while preserving other patterns."""
-        if target_track == 0 and target_pattern == 0:
-            return sq64.send_pattern(
-                self.inport,
-                self.outport,
-                project,
-                pattern,
-                melody_patterns,
-                rhythm_patterns,
-                global_channel=self.global_channel,
-            )
         return sq64.send_pattern(
             self.inport,
             self.outport,
