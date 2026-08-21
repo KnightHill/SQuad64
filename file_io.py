@@ -11,7 +11,7 @@ from typing import Optional
 PatternStep = tuple[Optional[int], int]
 
 
-MIN_NOTES = 4
+MIN_NOTES = 1
 MAX_NOTES = 64
 MIN_MIDI_NOTE = 0
 MAX_MIDI_NOTE = 127

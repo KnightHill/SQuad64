@@ -312,7 +312,6 @@ def run(args):
                 rhythm_patterns,
                 target_track=track,
                 target_pattern=pattern_number,
-                include_existing=False,
             )
 
         editor = PatternEditor(

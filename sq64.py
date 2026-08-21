@@ -1,5 +1,6 @@
 import sys
 import time
+from pathlib import Path
 from typing import (
     Callable,
     Dict,
@@ -84,6 +85,11 @@ FUNC_PARAM_ERROR = 0x25
 FUNC_FORMAT_ERROR = 0x26
 FUNC_NO_DATA     = 0x30
 
+ALSA_SEQ_OUTPUT_BUFFER = Path(
+    "/sys/module/snd_seq_midi/parameters/output_buffer_size"
+)
+MIN_ALSA_SEQ_OUTPUT_BUFFER = 8192
+
 
 # SQ-64 Global MIDI channel.
 # Channel 1 = 0 here, channel 16 = 15.
@@ -138,6 +144,28 @@ def find_sq64_ports(*, verbose: bool = False) -> Tuple[str, str]:
     input_name = midi_out_2_inputs[0] if midi_out_2_inputs else inputs[-1]
 
     return input_name, sequence_outputs[0]
+
+
+def ensure_large_sysex_output(outport: OutputPort) -> None:
+    """Reject an ALSA sequencer port that would truncate rhythm dumps."""
+    if getattr(outport, "_device_type", None) != "RtMidi/LINUX_ALSA":
+        return
+
+    try:
+        buffer_size = int(
+            ALSA_SEQ_OUTPUT_BUFFER.read_text(encoding="ascii").strip()
+        )
+    except (OSError, ValueError) as error:
+        raise RuntimeError(
+            "Unable to check the ALSA MIDI output buffer size"
+        ) from error
+
+    if buffer_size < MIN_ALSA_SEQ_OUTPUT_BUFFER:
+        raise RuntimeError(
+            f"ALSA MIDI output buffer is {buffer_size} bytes; SQ-64 Track D "
+            f"transfers require at least {MIN_ALSA_SEQ_OUTPUT_BUFFER}. Run:\n"
+            "  ./setup-midi-buffer.sh"
+        )
 
 
 def get_firmware_version(
@@ -1052,10 +1080,14 @@ def send_pattern(
     *,
     target_track: int = 0,
     target_pattern: int = 0,
-    include_existing: bool = True,
     global_channel: Optional[int] = None,
 ) -> None:
-    """Replace one melodic pattern, optionally retransmitting project data."""
+    """Replace one melodic pattern while preserving all other patterns."""
+    # Linux's snd_seq_midi defaults to one 4096-byte page. It silently
+    # truncates the 7068-byte Track D SysEx before F7, leaving the SQ-64
+    # stuck on "Receiving...". Check before entering project-receive mode.
+    ensure_large_sysex_output(outport)
+
     # Validate and pack everything before putting the SQ-64 into receiving
     # project mode.
     if len(project) != 512:
@@ -1072,14 +1104,13 @@ def send_pattern(
         raise RuntimeError("Invalid project size")
 
     prepared_melodies = []
-    updated_melodies = (
-        {
-            **melody_patterns,
-            (target_track, target_pattern): pattern,
-        }
-        if include_existing
-        else {(target_track, target_pattern): pattern}
-    )
+    # Korg's MIDI implementation requires a complete project transfer:
+    # patterns omitted between the project header and finalize messages are
+    # cleared by the SQ-64. Always retransmit every pattern read from it.
+    updated_melodies = {
+        **melody_patterns,
+        (target_track, target_pattern): pattern,
+    }
     for (track, pattern_number), melody_pattern in sorted(
         updated_melodies.items()
     ):
@@ -1096,8 +1127,7 @@ def send_pattern(
         prepared_melodies.append((label, selector, pattern_packed))
 
     prepared_rhythms = []
-    rhythm_items = rhythm_patterns.items() if include_existing else ()
-    for pattern_number, rhythm_pattern in sorted(rhythm_items):
+    for pattern_number, rhythm_pattern in sorted(rhythm_patterns.items()):
         pattern_packed = pack_7bit(rhythm_pattern)
 
         if len(rhythm_pattern) != 6176 or len(pattern_packed) != 7059:

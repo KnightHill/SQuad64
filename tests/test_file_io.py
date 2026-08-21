@@ -60,8 +60,15 @@ class FileIOTests(unittest.TestCase):
                 [(48, 255), (None, 255), (52, 255), (55, 255)],
             )
 
-    def test_length_must_be_between_four_and_sixty_four(self):
-        for notes in ([48, None, 52], list(range(65))):
+    def test_one_step_pattern_round_trips(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "pattern.pat"
+            file_io.save_pattern(path, [(48, 255)])
+
+            self.assertEqual(file_io.load_pattern(path), [(48, 255)])
+
+    def test_length_must_be_between_one_and_sixty_four(self):
+        for notes in ([], list(range(65))):
             with self.subTest(length=len(notes)):
                 with self.assertRaises(ValueError):
                     file_io.save_file("unused.pat", notes)

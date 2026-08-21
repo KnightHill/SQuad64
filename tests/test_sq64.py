@@ -233,6 +233,8 @@ class ClientTests(unittest.TestCase):
             b"pattern",
             {},
             {},
+            target_track=0,
+            target_pattern=0,
             global_channel=6,
         )
 
@@ -787,7 +789,7 @@ class SendTests(unittest.TestCase):
         self.assertEqual(outport.sent[1].data[6], 0x12)
 
     @patch("sq64.wait_for_ack")
-    def test_send_pattern_can_send_only_selected_target(self, wait_for_ack):
+    def test_send_pattern_preserves_existing_patterns(self, wait_for_ack):
         outport = RecordingPort()
         other_melody = bytearray(3104)
         other_rhythm = bytearray(6176)
@@ -801,14 +803,23 @@ class SendTests(unittest.TestCase):
             {0: other_rhythm},
             target_track=1,
             target_pattern=2,
-            include_existing=False,
         )
 
         self.assertEqual(
-            [message.data[6] for message in outport.sent[1:2]],
-            [0x12],
+            [message.data[6] for message in outport.sent[1:4]],
+            [0x00, 0x12, 0x20],
         )
-        self.assertEqual(len(outport.sent), 3)
+        self.assertEqual(
+            [sq64.get_function(message) for message in outport.sent],
+            [
+                sq64.FUNC_CURRENT_PROJECT_DUMP,
+                sq64.FUNC_MELODY_PATTERN_DUMP,
+                sq64.FUNC_MELODY_PATTERN_DUMP,
+                sq64.FUNC_MELODY_PATTERN_DUMP,
+                sq64.FUNC_RHYTHM_PATTERN_DUMP,
+                sq64.FUNC_FINALIZE,
+            ],
+        )
 
     @patch("sq64.wait_for_ack")
     def test_send_pattern_sends_all_data_in_order_and_finalizes(self, wait_for_ack):
@@ -853,6 +864,23 @@ class SendTests(unittest.TestCase):
                 "project finalize",
             ],
         )
+
+    @patch("sq64.Path.read_text", return_value="4096")
+    def test_send_pattern_rejects_small_alsa_output_buffer(self, _read_text):
+        outport = RecordingPort()
+        outport._device_type = "RtMidi/LINUX_ALSA"
+
+        with self.assertRaisesRegex(RuntimeError, "setup-midi-buffer.sh"):
+            sq64.send_pattern(
+                Mock(),
+                outport,
+                bytearray(512),
+                sq64.build_empty_pattern(),
+                {},
+                {},
+            )
+
+        self.assertEqual(outport.sent, [])
 
     @patch("sq64.wait_for_ack")
     def test_send_pattern_finalizes_after_transfer_error(self, wait_for_ack):
