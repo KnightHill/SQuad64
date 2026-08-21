@@ -118,6 +118,7 @@ class SQ64Client:
         *,
         target_track: int = 0,
         target_pattern: int = 0,
+        include_existing: bool = True,
     ) -> None:
         """Replace one melodic pattern while preserving other patterns."""
         if target_track == 0 and target_pattern == 0:
@@ -139,5 +140,6 @@ class SQ64Client:
             rhythm_patterns,
             target_track=target_track,
             target_pattern=target_pattern,
+            include_existing=include_existing,
             global_channel=self.global_channel,
         )

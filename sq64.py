@@ -1052,9 +1052,10 @@ def send_pattern(
     *,
     target_track: int = 0,
     target_pattern: int = 0,
+    include_existing: bool = True,
     global_channel: Optional[int] = None,
 ) -> None:
-    """Replace one melodic pattern while preserving all other patterns."""
+    """Replace one melodic pattern, optionally retransmitting project data."""
     # Validate and pack everything before putting the SQ-64 into receiving
     # project mode.
     if len(project) != 512:
@@ -1071,10 +1072,14 @@ def send_pattern(
         raise RuntimeError("Invalid project size")
 
     prepared_melodies = []
-    updated_melodies = {
-        **melody_patterns,
-        (target_track, target_pattern): pattern,
-    }
+    updated_melodies = (
+        {
+            **melody_patterns,
+            (target_track, target_pattern): pattern,
+        }
+        if include_existing
+        else {(target_track, target_pattern): pattern}
+    )
     for (track, pattern_number), melody_pattern in sorted(
         updated_melodies.items()
     ):
@@ -1091,7 +1096,8 @@ def send_pattern(
         prepared_melodies.append((label, selector, pattern_packed))
 
     prepared_rhythms = []
-    for pattern_number, rhythm_pattern in sorted(rhythm_patterns.items()):
+    rhythm_items = rhythm_patterns.items() if include_existing else ()
+    for pattern_number, rhythm_pattern in sorted(rhythm_items):
         pattern_packed = pack_7bit(rhythm_pattern)
 
         if len(rhythm_pattern) != 6176 or len(pattern_packed) != 7059:

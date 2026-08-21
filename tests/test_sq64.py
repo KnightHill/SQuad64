@@ -787,6 +787,30 @@ class SendTests(unittest.TestCase):
         self.assertEqual(outport.sent[1].data[6], 0x12)
 
     @patch("sq64.wait_for_ack")
+    def test_send_pattern_can_send_only_selected_target(self, wait_for_ack):
+        outport = RecordingPort()
+        other_melody = bytearray(3104)
+        other_rhythm = bytearray(6176)
+
+        sq64.send_pattern(
+            Mock(),
+            outport,
+            bytearray(512),
+            sq64.build_empty_pattern(),
+            {(0, 0): other_melody, (2, 0): other_melody},
+            {0: other_rhythm},
+            target_track=1,
+            target_pattern=2,
+            include_existing=False,
+        )
+
+        self.assertEqual(
+            [message.data[6] for message in outport.sent[1:2]],
+            [0x12],
+        )
+        self.assertEqual(len(outport.sent), 3)
+
+    @patch("sq64.wait_for_ack")
     def test_send_pattern_sends_all_data_in_order_and_finalizes(self, wait_for_ack):
         project = bytearray(512)
         pattern = sq64.build_pattern(TEST_PATTERN_NOTES)
