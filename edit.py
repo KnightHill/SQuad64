@@ -195,7 +195,7 @@ class PatternEditor:
         )
         print()
         print("  [←/→] step  [PgUp/PgDn] page  [n] note  [r] rest  [c] copy  [p] paste")
-        print("  [↑/↓] velocity  [S] save  [W] send  [q/Esc] quit")
+        print("  [↑/↓] velocity  [W] send  [q/Esc] quit")
         if self.message:
             print(f"\n  {self.message}")
 
@@ -253,9 +253,7 @@ class PatternEditor:
                 key = self.term.inkey()
                 if key.name == "ESCAPE" or str(key).lower() == "q":
                     return "quit"
-                if str(key) == "S":
-                    self.save()
-                elif str(key) == "W":
+                if str(key) == "W":
                     if self.is_empty:
                         self.message = "Cannot send an empty pattern; enter at least one note."
                         continue
