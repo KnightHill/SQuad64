@@ -10,7 +10,6 @@ from typing import Callable, Optional
 import mido
 from blessed import Terminal
 
-import file_io as io
 import sq64
 from sq64_client import SQ64Client
 from version import __version__
@@ -18,6 +17,7 @@ from version import __version__
 PAGE_SIZE = 16
 NOTE_NAMES = ("C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B")
 NOTE_PATTERN = re.compile(r"^([A-Ga-g])([#b]?)(-?\d+)$")
+PatternStep = tuple[Optional[int], int]
 
 
 def pattern_number(value):
@@ -63,7 +63,7 @@ def parse_note(value: str) -> Optional[int]:
     return value
 
 
-def pattern_steps(pattern: sq64.ByteData) -> list[io.PatternStep]:
+def pattern_steps(pattern: sq64.ByteData) -> list[PatternStep]:
     """Extract editable notes and velocities from a mono SQ-64 pattern."""
     _require_mono_pattern(pattern)
     steps = []
@@ -100,7 +100,7 @@ def _require_mono_pattern(pattern: sq64.ByteData) -> None:
 
 
 def apply_steps(
-    pattern: sq64.ByteData, steps: list[io.PatternStep]
+    pattern: sq64.ByteData, steps: list[PatternStep]
 ) -> bytearray:
     """Apply editable note/velocity values to a retrieved pattern."""
     _require_mono_pattern(pattern)
@@ -129,7 +129,6 @@ def parse_args():
     parser.add_argument("--verbose", action="store_true", help="list MIDI ports")
     parser.add_argument("-t", "--track", type=str.upper, choices=("A", "B", "C"), required=True)
     parser.add_argument("-p", "--pattern", type=pattern_number, metavar="1-16", required=True)
-    parser.add_argument("-o", "--output", default="retrieved.pat", help="local pattern file")
     parser.add_argument("-v", "--version", action="version", version=f"%(prog)s {__version__}")
     return parser.parse_args()
 
@@ -140,21 +139,19 @@ class PatternEditor:
     def __init__(
         self,
         term: Terminal,
-        steps: list[io.PatternStep],
-        output: str,
+        steps: list[PatternStep],
         *,
         is_new: bool = False,
         on_send: Optional[Callable[[], None]] = None,
     ):
         self.term = term
         self.steps = steps
-        self.output = output
         self.cursor = 0
         self.page = 0
         self.message = ""
         self.is_new = is_new
         self.on_send = on_send
-        self.clipboard: Optional[io.PatternStep] = None
+        self.clipboard: Optional[PatternStep] = None
 
     @property
     def page_count(self) -> int:
@@ -230,13 +227,6 @@ class PatternEditor:
                 buffer = buffer[:-1]
             elif str(key).isprintable() and len(buffer) < 5:
                 buffer += str(key)
-
-    def save(self) -> None:
-        if self.is_empty:
-            self.message = "Cannot save an empty pattern; enter at least one note."
-            return
-        io.save_pattern(self.output, self.steps)
-        self.message = f"Saved {self.output}"
 
     @property
     def is_empty(self) -> bool:
@@ -339,7 +329,6 @@ def run(args):
         editor = PatternEditor(
             Terminal(),
             pattern_steps(original),
-            args.output,
             is_new=is_new,
         )
         editor.on_send = send_edited_pattern

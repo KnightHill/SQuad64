@@ -54,7 +54,6 @@ class EditArgumentTests(unittest.TestCase):
         self.assertEqual(args.track, "C")
         self.assertEqual(args.pattern, 16)
         self.assertFalse(args.verbose)
-        self.assertEqual(args.output, "retrieved.pat")
 
     def test_track_is_limited_to_a_through_c(self):
         with patch.object(
