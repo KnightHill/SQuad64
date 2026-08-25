@@ -4,8 +4,7 @@ import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from unittest.mock import patch
 
-import dump
-import edit
+from squad64 import dump, edit
 
 
 class DumpArgumentTests(unittest.TestCase):
@@ -39,7 +38,7 @@ class DumpArgumentTests(unittest.TestCase):
                     dump.parse_args()
 
         self.assertEqual(exit_result.exception.code, 0)
-        self.assertEqual(output.getvalue(), "squad64-dump 0.3.2\n")
+        self.assertEqual(output.getvalue(), "squad64-dump 0.3.3\n")
 
 
 class EditArgumentTests(unittest.TestCase):
@@ -96,7 +95,7 @@ class EditArgumentTests(unittest.TestCase):
                     edit.parse_args()
 
         self.assertEqual(exit_result.exception.code, 0)
-        self.assertEqual(output.getvalue(), "squad64-edit 0.3.2\n")
+        self.assertEqual(output.getvalue(), "squad64-edit 0.3.3\n")
 
 
 class EditPatternTests(unittest.TestCase):

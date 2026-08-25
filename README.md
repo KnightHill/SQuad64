@@ -13,13 +13,13 @@ own risk. Back up important SQ-64 projects before using development features.
 
 The repository contains two command-line applications:
 
-- `squad64-dump` (`dump.py`) reads and displays the current SQ-64 project. It
+- `squad64-dump` reads and displays the current SQ-64 project. It
   is read-only and cannot update the device.
-- `squad64-edit` (`edit.py`) is the developing pattern editor. It currently
+- `squad64-edit` is the developing pattern editor. It currently
   reads a selected melodic track and pattern; editing behavior is still under
   development.
 
-The applications share their version in [`version.py`](version.py).
+Both applications are installed from the `squad64` Python package.
 
 ## Edit buffer and saved projects
 
@@ -35,18 +35,17 @@ a saved project or restarting the SQ-64 may discard edit-buffer changes.
 ## Requirements
 
 - Korg SQ-64 running system version 2.x
-- Python 3
+- Python 3.10 or newer
 - A working MIDI connection to the SQ-64
 - [`mido`](https://mido.readthedocs.io/)
 - [`python-rtmidi`](https://pypi.org/project/python-rtmidi/)
 - [`blessed`](https://pypi.org/project/blessed/)
 
-Install the Python dependencies in a virtual environment:
+Install the project and its command-line applications in a virtual environment:
 
 ```bash
 python3 -m venv .venv
-.venv/bin/python -m pip install mido python-rtmidi
-.venv/bin/python -m pip install blessed
+.venv/bin/python -m pip install -e .
 ```
 
 ## Usage
@@ -54,27 +53,27 @@ python3 -m venv .venv
 Connect and power on the SQ-64, then dump the current project:
 
 ```bash
-./dump.py
+squad64-dump
 ```
 
 Display the dump application's version:
 
 ```bash
-./dump.py --version
+squad64-dump --version
 ```
 
 Display firmware and global settings without downloading the current project:
 
 ```bash
-./dump.py --global
+squad64-dump --global
 ```
 
 Filter the displayed project by track, pattern number, or both:
 
 ```bash
-./dump.py --track B
-./dump.py --pattern 3
-./dump.py --track D --pattern 8
+squad64-dump --track B
+squad64-dump --pattern 3
+squad64-dump --track D --pattern 8
 ```
 
 Dump tracks are `A` through `D`, and pattern numbers are `1` through `16`.
@@ -84,7 +83,7 @@ from the SQ-64.
 To use the editor, provide both a melodic track and a pattern:
 
 ```bash
-./edit.py --track A --pattern 1
+squad64-edit --track A --pattern 1
 ```
 
 The editor accepts tracks `A` through `C` and pattern numbers `1` through
@@ -110,8 +109,8 @@ selected track and pattern.
 ## MIDI configuration
 
 The SQ-64 global MIDI channel is currently set by `GLOBAL_CHANNEL` in
-[`sq64.py`](sq64.py). Its value is zero-based: `0` means MIDI channel 1 and
-`15` means MIDI channel 16.
+[`squad64/protocol.py`](squad64/protocol.py). Its value is zero-based: `0`
+means MIDI channel 1 and `15` means MIDI channel 16.
 
 On the SQ-64 ALSA USB interface the program prefers `MIDI OUT 2` for device
 responses and the `SEQ` endpoint for data sent to the sequencer.
@@ -185,3 +184,14 @@ Korg requires project dumps to use the fixed `0x41`, pattern dumps, `0x70`
 sequence. A `0x48` pattern dump cannot be sent independently, and patterns
 omitted from a project transfer are cleared. Pattern updates therefore always
 retransmit every existing melodic and rhythm pattern.
+
+## Development
+
+Run the standard-library `unittest` suite with:
+
+```bash
+.venv/bin/python -m unittest discover -s tests -v
+```
+
+The protocol helpers can also be imported independently through
+`squad64.protocol`.

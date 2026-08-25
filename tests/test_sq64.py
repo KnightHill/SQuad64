@@ -5,9 +5,9 @@ from unittest.mock import ANY, Mock, patch
 
 import mido
 
-import progress
-import sq64
-from sq64_client import SQ64Client
+from squad64 import progress
+from squad64 import protocol as sq64
+from squad64.client import SQ64Client
 
 
 TEST_PATTERN_NOTES = [
@@ -45,8 +45,8 @@ def named_pattern(name):
 
 
 class MidiPortTests(unittest.TestCase):
-    @patch("sq64.mido.get_output_names")
-    @patch("sq64.mido.get_input_names")
+    @patch("squad64.protocol.mido.get_output_names")
+    @patch("squad64.protocol.mido.get_input_names")
     def test_find_sq64_ports_prefers_midi_out_2_and_seq(
         self, get_inputs, get_outputs
     ):
@@ -65,14 +65,14 @@ class MidiPortTests(unittest.TestCase):
             ("SQ-64 MIDI OUT 2", "SQ-64 SEQ"),
         )
 
-    @patch("sq64.mido.get_output_names", return_value=["SQ-64 SEQ"])
-    @patch("sq64.mido.get_input_names", return_value=[])
+    @patch("squad64.protocol.mido.get_output_names", return_value=["SQ-64 SEQ"])
+    @patch("squad64.protocol.mido.get_input_names", return_value=[])
     def test_find_sq64_ports_requires_input(self, _get_inputs, _get_outputs):
         with self.assertRaisesRegex(RuntimeError, "input port"):
             sq64.find_sq64_ports()
 
-    @patch("sq64.mido.get_output_names", return_value=["SQ-64 MIDI OUT 1"])
-    @patch("sq64.mido.get_input_names", return_value=["SQ-64 MIDI OUT 2"])
+    @patch("squad64.protocol.mido.get_output_names", return_value=["SQ-64 MIDI OUT 1"])
+    @patch("squad64.protocol.mido.get_input_names", return_value=["SQ-64 MIDI OUT 2"])
     def test_find_sq64_ports_requires_seq_output(
         self, _get_inputs, _get_outputs
     ):
@@ -147,8 +147,8 @@ class MidiPortTests(unittest.TestCase):
                 RecordingPort([reply]), RecordingPort()
             )
 
-    @patch("sq64.time.sleep")
-    @patch("sq64.time.monotonic", side_effect=[10.0, 10.0, 10.6])
+    @patch("squad64.protocol.time.sleep")
+    @patch("squad64.protocol.time.monotonic", side_effect=[10.0, 10.0, 10.6])
     def test_get_firmware_version_times_out(self, _monotonic, sleep):
         with self.assertRaisesRegex(TimeoutError, "firmware version"):
             sq64.get_firmware_version(
@@ -191,7 +191,7 @@ class ClientTests(unittest.TestCase):
                         global_channel=channel,
                     )
 
-    @patch("sq64.get_firmware_version", return_value="2.04")
+    @patch("squad64.protocol.get_firmware_version", return_value="2.04")
     def test_client_firmware_query_uses_owned_ports(self, get_version):
         inport = RecordingPort()
         outport = RecordingPort()
@@ -200,9 +200,9 @@ class ClientTests(unittest.TestCase):
         self.assertEqual(client.get_firmware_version(timeout=1.5), "2.04")
         get_version.assert_called_once_with(inport, outport, 1.5)
 
-    @patch("sq64.send_pattern")
-    @patch("sq64.read_global_data", return_value=bytearray(b"GLOB"))
-    @patch("sq64.read_current_project", return_value=(b"project", {}, {}))
+    @patch("squad64.protocol.send_pattern")
+    @patch("squad64.protocol.read_global_data", return_value=bytearray(b"GLOB"))
+    @patch("squad64.protocol.read_current_project", return_value=(b"project", {}, {}))
     def test_client_project_operations_use_owned_ports(
         self, read_current_project, read_global_data, send_pattern
     ):
@@ -291,15 +291,15 @@ class SysexTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "0x26"):
             sq64.wait_for_function(port, sq64.FUNC_ACK)
 
-    @patch("sq64.time.sleep")
-    @patch("sq64.time.monotonic", side_effect=[10.0, 10.0, 10.6])
+    @patch("squad64.protocol.time.sleep")
+    @patch("squad64.protocol.time.monotonic", side_effect=[10.0, 10.0, 10.6])
     def test_wait_for_function_times_out(self, _monotonic, sleep):
         with self.assertRaisesRegex(TimeoutError, "0x23"):
             sq64.wait_for_function(RecordingPort(), sq64.FUNC_ACK, timeout=0.5)
 
         sleep.assert_called_once_with(0.001)
 
-    @patch("sq64.wait_for_function", side_effect=TimeoutError)
+    @patch("squad64.protocol.wait_for_function", side_effect=TimeoutError)
     def test_wait_for_ack_adds_transfer_context(self, wait_for_function):
         with self.assertRaisesRegex(TimeoutError, "after melody pattern"):
             sq64.wait_for_ack(Mock(), "melody pattern", timeout=2.0)
@@ -450,9 +450,9 @@ class ReadTests(unittest.TestCase):
                 b"PATT",
             )
 
-    @patch("sq64.wait_for_ack")
-    @patch("sq64.read_pattern_dump")
-    @patch("sq64.wait_for_function")
+    @patch("squad64.protocol.wait_for_ack")
+    @patch("squad64.protocol.read_pattern_dump")
+    @patch("squad64.protocol.wait_for_function")
     def test_read_current_project_reads_present_patterns_and_finalizes(
         self, wait_for_function, read_pattern_dump, wait_for_ack
     ):
@@ -495,8 +495,8 @@ class ReadTests(unittest.TestCase):
         self.assertEqual(output.count("\n"), 1)
         wait_for_ack.assert_called_once()
 
-    @patch("sq64.wait_for_ack")
-    @patch("sq64.wait_for_function")
+    @patch("squad64.protocol.wait_for_ack")
+    @patch("squad64.protocol.wait_for_function")
     def test_read_current_project_finalizes_after_invalid_dump(
         self, wait_for_function, wait_for_ack
     ):
@@ -790,7 +790,7 @@ class SendTests(unittest.TestCase):
 
         self.assertEqual(outport.sent, [])
 
-    @patch("sq64.wait_for_ack")
+    @patch("squad64.protocol.wait_for_ack")
     def test_send_pattern_creates_absent_selected_target(self, wait_for_ack):
         outport = RecordingPort()
 
@@ -809,7 +809,7 @@ class SendTests(unittest.TestCase):
         self.assertTrue(sent_project[42] & (1 << 2))
         self.assertEqual(outport.sent[1].data[6], 0x12)
 
-    @patch("sq64.wait_for_ack")
+    @patch("squad64.protocol.wait_for_ack")
     def test_send_pattern_preserves_existing_patterns(self, wait_for_ack):
         outport = RecordingPort()
         other_melody = bytearray(3104)
@@ -842,7 +842,7 @@ class SendTests(unittest.TestCase):
             ],
         )
 
-    @patch("sq64.wait_for_ack")
+    @patch("squad64.protocol.wait_for_ack")
     def test_send_pattern_sends_all_data_in_order_and_finalizes(self, wait_for_ack):
         project = bytearray(512)
         pattern = sq64.build_pattern(TEST_PATTERN_NOTES)
@@ -886,7 +886,7 @@ class SendTests(unittest.TestCase):
             ],
         )
 
-    @patch("sq64.Path.read_text", return_value="4096")
+    @patch("squad64.protocol.Path.read_text", return_value="4096")
     def test_send_pattern_rejects_small_alsa_output_buffer(self, _read_text):
         outport = RecordingPort()
         outport._device_type = "RtMidi/LINUX_ALSA"
@@ -905,8 +905,8 @@ class SendTests(unittest.TestCase):
 
         self.assertEqual(outport.sent, [])
 
-    @patch("sq64.wait_for_ack")
-    @patch("sq64.Path.read_text", return_value="4096")
+    @patch("squad64.protocol.wait_for_ack")
+    @patch("squad64.protocol.Path.read_text", return_value="4096")
     def test_send_pattern_allows_small_buffer_without_rhythm_data(
         self, _read_text, _wait_for_ack
     ):
@@ -924,7 +924,7 @@ class SendTests(unittest.TestCase):
 
         self.assertEqual(len(outport.sent), 3)
 
-    @patch("sq64.wait_for_ack")
+    @patch("squad64.protocol.wait_for_ack")
     def test_send_pattern_finalizes_after_transfer_error(self, wait_for_ack):
         wait_for_ack.side_effect = [TimeoutError("failed"), None]
         outport = RecordingPort()

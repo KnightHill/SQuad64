@@ -1,6 +1,6 @@
 from typing import Optional
 
-import sq64
+from . import protocol as sq64
 
 
 class SQ64Client:

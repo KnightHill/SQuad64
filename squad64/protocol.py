@@ -15,7 +15,7 @@ from typing import (
 
 import mido
 
-from progress import PatternDumpIndicator
+from .progress import PatternDumpIndicator
 
 
 class MidiMessage(Protocol):
