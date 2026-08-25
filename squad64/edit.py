@@ -10,9 +10,9 @@ from typing import Callable, Optional
 import mido
 from blessed import Terminal
 
-import sq64
-from sq64_client import SQ64Client
-from version import __version__
+from . import __version__
+from . import protocol as sq64
+from .client import SQ64Client
 
 PAGE_SIZE = 16
 NOTE_NAMES = ("C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B")

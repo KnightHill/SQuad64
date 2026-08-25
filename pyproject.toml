@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "squad64"
+dynamic = ["version"]
+description = "Inspect and edit projects on a Korg SQ-64"
+requires-python = ">=3.10"
+dependencies = [
+    "blessed>=1.20",
+    "mido>=1.3",
+    "python-rtmidi>=1.5",
+]
+
+[project.scripts]
+squad64-dump = "squad64.dump:main"
+squad64-edit = "squad64.edit:main"
+
+[tool.setuptools.packages.find]
+include = ["squad64*"]
+
+[tool.setuptools.dynamic]
+version = {attr = "squad64.__version__"}

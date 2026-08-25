@@ -5,9 +5,9 @@ import sys
 
 import mido
 
-import sq64
-from sq64_client import SQ64Client
-from version import __version__
+from . import __version__
+from . import protocol as sq64
+from .client import SQ64Client
 
 def pattern_number(value):
     """Parse a user-facing SQ-64 pattern number."""
