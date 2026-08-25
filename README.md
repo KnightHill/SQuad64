@@ -15,11 +15,10 @@ The repository contains two command-line applications:
 
 - `squad64-dump` reads and displays the current SQ-64 project. It
   is read-only and cannot update the device.
-- `squad64-edit` is the developing pattern editor. It currently
-  reads a selected melodic track and pattern; editing behavior is still under
-  development.
+- `squad64-edit` reads, edits, and sends one selected melodic pattern.
 
-Both applications are installed from the `squad64` Python package.
+Both applications are installed from the `squad64` Python package. The current
+application version is `0.3.3`.
 
 ## Edit buffer and saved projects
 
@@ -45,7 +44,25 @@ Install the project and its command-line applications in a virtual environment:
 
 ```bash
 python3 -m venv .venv
-.venv/bin/python -m pip install -e .
+source .venv/bin/activate
+python -m pip install -e .
+```
+
+Activating the environment places `squad64-dump` and `squad64-edit` on the
+current shell's command path. Verify the installation with:
+
+```bash
+squad64-dump --version
+squad64-edit --version
+```
+
+The installed commands are named `squad64-dump` and `squad64-edit`, not
+`dump` and `edit`. If the virtual environment is not activated, invoke them by
+their complete paths instead:
+
+```bash
+.venv/bin/squad64-dump --version
+.venv/bin/squad64-edit --version
 ```
 
 ## Usage
@@ -87,12 +104,19 @@ squad64-edit --track A --pattern 1
 ```
 
 The editor accepts tracks `A` through `C` and pattern numbers `1` through
-`16`. It displays one editable page of up to 16 steps at a time. Use the
-arrow keys to move, `n` to enter a note such as `C4` or `F#3`, `r` for a rest,
-and the up/down arrows to adjust velocity. Use `W` to send the selected pattern
-to the SQ-64. Empty patterns cannot be sent; enter at least one note first.
-Use `--verbose` with either application to list available MIDI ports while
-connecting.
+`16`. It displays one page of up to 16 steps at a time and shows the complete
+pattern length on the top line.
+
+- Use left/right arrows or `h`/`l` to select a step.
+- Use Page Up/Page Down or `[`/`]` to change pages.
+- Use `n` to enter a note such as `C4` or `F#3`, and `r` to enter a rest.
+- Use up/down arrows or `+`/`-` to adjust velocity by `0.5`.
+- Use `c` to copy the current step and `p` to paste it.
+- Use uppercase `W` to send the pattern to the SQ-64.
+- Use `q` or Escape to quit.
+
+Empty patterns cannot be sent; enter at least one note first. Use `--verbose`
+with either application to list available MIDI ports while connecting.
 
 The one-note-per-step editor supports MONO patterns only. It refuses CHORD,
 ARP, or patterns containing additional hidden note events so those events
@@ -187,10 +211,17 @@ retransmit every existing melodic and rhythm pattern.
 
 ## Development
 
+The installable source is organized as follows:
+
+- `squad64.dump` and `squad64.edit` implement the two command-line apps.
+- `squad64.protocol` implements SQ-64 SysEx encoding and transfers.
+- `squad64.client` provides the stateful client used by both apps.
+- `squad64.progress` renders project-download progress.
+
 Run the standard-library `unittest` suite with:
 
 ```bash
-.venv/bin/python -m unittest discover -s tests -v
+python -m unittest discover -s tests -v
 ```
 
 The protocol helpers can also be imported independently through
