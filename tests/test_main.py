@@ -1,8 +1,9 @@
 import io
 import sys
 import unittest
+from argparse import Namespace
 from contextlib import redirect_stderr, redirect_stdout
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from squad64 import dump, edit
 
@@ -38,7 +39,84 @@ class DumpArgumentTests(unittest.TestCase):
                     dump.parse_args()
 
         self.assertEqual(exit_result.exception.code, 0)
-        self.assertEqual(output.getvalue(), "squad64-dump 0.3.3\n")
+        self.assertEqual(output.getvalue(), "squad64-dump 0.4.0\n")
+
+    def test_strudel_requires_melodic_track_and_pattern(self):
+        valid_arguments = (
+            "squad64-dump",
+            "-strudel",
+            "--track",
+            "b",
+            "--pattern",
+            "3",
+        )
+        with patch.object(sys, "argv", list(valid_arguments)):
+            args = dump.parse_args()
+
+        self.assertTrue(args.strudel)
+        self.assertEqual(args.track, "B")
+        self.assertEqual(args.pattern, 3)
+
+        invalid_arguments = (
+            ("-strudel",),
+            ("-strudel", "--track", "A"),
+            ("-strudel", "--pattern", "1"),
+            ("-strudel", "--track", "D", "--pattern", "1"),
+            ("-strudel", "--global", "--track", "A", "--pattern", "1"),
+        )
+        for arguments in invalid_arguments:
+            with self.subTest(arguments=arguments):
+                with patch.object(sys, "argv", ["squad64-dump", *arguments]):
+                    with redirect_stderr(io.StringIO()):
+                        with self.assertRaises(SystemExit):
+                            dump.parse_args()
+
+
+class DumpRunTests(unittest.TestCase):
+    def test_strudel_prints_only_code_to_stdout(self):
+        project = bytearray(32)
+        project[20] = 1200 & 0xFF
+        project[21] = 1200 >> 8
+        pattern = dump.sq64.build_pattern([60, None, 64])
+        client = MagicMock()
+        client.read_current_project.return_value = (
+            project,
+            {(0, 0): pattern},
+            {},
+        )
+        input_port = MagicMock()
+        output_port = MagicMock()
+        output = io.StringIO()
+        errors = io.StringIO()
+        args = Namespace(
+            verbose=False,
+            strudel=True,
+            show_global=False,
+            track="A",
+            pattern=1,
+        )
+
+        with (
+            patch.object(
+                dump.sq64,
+                "find_sq64_ports",
+                return_value=("input", "output"),
+            ),
+            patch.object(dump.mido, "open_input", return_value=input_port),
+            patch.object(dump.mido, "open_output", return_value=output_port),
+            patch.object(dump, "SQ64Client", return_value=client),
+            redirect_stdout(output),
+            redirect_stderr(errors),
+        ):
+            dump.run(args)
+
+        self.assertEqual(
+            output.getvalue(),
+            'setcpm(120/4)\n'
+            'note("<60 ~ 64>*16")\n'
+            '.sound("supersaw")\n',
+        )
+        self.assertIn("Reading current project", errors.getvalue())
 
 
 class EditArgumentTests(unittest.TestCase):
@@ -95,7 +173,7 @@ class EditArgumentTests(unittest.TestCase):
                     edit.parse_args()
 
         self.assertEqual(exit_result.exception.code, 0)
-        self.assertEqual(output.getvalue(), "squad64-edit 0.3.3\n")
+        self.assertEqual(output.getvalue(), "squad64-edit 0.4.0\n")
 
 
 class EditPatternTests(unittest.TestCase):

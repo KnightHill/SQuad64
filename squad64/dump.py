@@ -2,12 +2,14 @@
 
 import argparse
 import sys
+from contextlib import redirect_stdout
 
 import mido
 
 from . import __version__
 from . import protocol as sq64
 from .client import SQ64Client
+from .output import melody_pattern_as_strudel
 
 def pattern_number(value):
     """Parse a user-facing SQ-64 pattern number."""
@@ -60,16 +62,38 @@ def parse_args():
         action="version",
         version=f"%(prog)s {__version__}",
     )
-    return parser.parse_args()
+    parser.add_argument(
+        "-strudel",
+        "--strudel",
+        action="store_true",
+        help="print one selected melodic pattern as Strudel code",
+    )
+
+    args = parser.parse_args()
+    if args.strudel:
+        if args.show_global:
+            parser.error("-strudel cannot be combined with --global")
+        if args.track is None or args.pattern is None:
+            parser.error("-strudel requires --track and --pattern")
+        if args.track == "D":
+            parser.error("-strudel supports melodic tracks A through C")
+    return args
 
 
 def run(args):
     """Run one SQ-64 read-only dump operation."""
-    input_name, output_name = sq64.find_sq64_ports(verbose=args.verbose)
+    if args.strudel:
+        with redirect_stdout(sys.stderr):
+            input_name, output_name = sq64.find_sq64_ports(
+                verbose=args.verbose
+            )
+    else:
+        input_name, output_name = sq64.find_sq64_ports(verbose=args.verbose)
 
-    print()
-    print("SQ-64 input :", input_name)
-    print("SQ-64 output:", output_name)
+    status = sys.stderr if args.strudel else sys.stdout
+    print(file=status)
+    print("SQ-64 input :", input_name, file=status)
+    print("SQ-64 output:", output_name, file=status)
 
     with (
         mido.open_input(input_name) as inp,
@@ -86,10 +110,33 @@ def run(args):
             sq64.print_global_data(global_data)
             return
 
-        print("\nReading current project and existing patterns...")
-        project, melody_patterns, rhythm_patterns = (
-            client.read_current_project()
+        print(
+            "\nReading current project and existing patterns...",
+            file=status,
         )
+        if args.strudel:
+            with redirect_stdout(sys.stderr):
+                project, melody_patterns, rhythm_patterns = (
+                    client.read_current_project()
+                )
+        else:
+            project, melody_patterns, rhythm_patterns = (
+                client.read_current_project()
+            )
+
+        if args.strudel:
+            track = ord(args.track) - ord("A")
+            pattern_number = args.pattern - 1
+            pattern = melody_patterns.get((track, pattern_number))
+            if pattern is None:
+                raise RuntimeError(
+                    f"Track {args.track} / Pattern {args.pattern} "
+                    "does not exist"
+                )
+            bpm = (project[20] | project[21] << 8) / 10
+            print(melody_pattern_as_strudel(pattern, bpm))
+            return
+
         sq64.print_project_dump(
             project,
             melody_patterns,

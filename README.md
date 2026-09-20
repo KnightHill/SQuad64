@@ -18,7 +18,7 @@ The repository contains two command-line applications:
 - `squad64-edit` reads, edits, and sends one selected melodic pattern.
 
 Both applications are installed from the `squad64` Python package. The current
-application version is `0.3.3`.
+application version is `0.4.0`.
 
 ## Edit buffer and saved projects
 
@@ -96,6 +96,34 @@ squad64-dump --track D --pattern 8
 Dump tracks are `A` through `D`, and pattern numbers are `1` through `16`.
 Filters affect only the printed output; the complete project is still read
 from the SQ-64.
+
+Export one melodic pattern as code for the
+[Strudel web editor](https://strudel.cc/) by specifying its track and pattern:
+
+```bash
+squad64-dump -strudel --track A --pattern 1
+```
+
+`--strudel` is also accepted. Strudel export supports melodic tracks `A`
+through `C`; Track `D` is not supported. The generated code uses the project
+tempo, MIDI note numbers, `~` for rests, and bracketed comma-separated notes
+for chords. For example:
+
+```javascript
+setcpm(120/4)
+note("<60 ~ [64,67] 72>*16")
+.sound("supersaw")
+```
+
+Status and MIDI progress messages are written to standard error in this mode,
+so the Strudel code can be redirected directly to a file:
+
+```bash
+squad64-dump -strudel -t A -p 1 > pattern.strudel
+```
+
+The exporter represents the SQ-64 step grid and enabled notes. It does not
+currently export velocity, gate length, automation, or arpeggiator behavior.
 
 To use the editor, provide both a melodic track and a pattern:
 
